@@ -1,0 +1,1348 @@
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
+#include <iostream>
+#include <fstream>
+#include <stdexcept>
+#include <functional>
+#include <cstdlib>
+#include <cstdint> // Necessary for UINT32_MAX
+#include <algorithm> // For std::max/min
+
+#include <vector>
+#include <set>
+
+#define PHYSICAL_DEVICE_SCORE_SELECTION
+
+#ifdef PHYSICAL_DEVICE_SCORE_SELECTION
+#include <map>
+#endif
+
+
+struct optional{
+	uint32_t value;
+	bool has_value;
+	optional() : value(0), has_value(false) {};
+	void set_value(uint32_t v) {
+		value = v;
+		has_value = true;
+	};
+};
+
+struct QueueFamilyIndices {
+	optional graphicsFamily;
+	optional presentFamily;
+
+	bool isComplete() {
+		return graphicsFamily.has_value && presentFamily.has_value;
+	}
+};
+
+struct SwapChainSupportDetails {
+	VkSurfaceCapabilitiesKHR capabilities;
+	std::vector<VkSurfaceFormatKHR> formats;
+	std::vector<VkPresentModeKHR> presentModes;
+};
+
+const int WIDTH = 800;
+const int HEIGHT = 600;
+
+const std::vector<const char*> validationLayers = {
+	"VK_LAYER_KHRONOS_validation"
+};
+
+const std::vector<const char*> deviceExtensions = {
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
+#ifdef NDEBUG
+const bool enableValidationLayers = false;
+#else
+const bool enableValidationLayers = true;
+#endif
+
+void compileShaders() {
+	system("C:/VulkanSDK/1.2.135.0/Bin32/glslc ../../VulkanTutorial/shader.vert -o ../../VulkanTutorial/vert.spv");
+	system("C:/VulkanSDK/1.2.135.0/Bin32/glslc ../../VulkanTutorial/shader.frag -o ../../VulkanTutorial/frag.spv");
+}
+
+VkResult CreateDebugUtilsMessengerEXT(
+	VkInstance instance,
+	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+	const VkAllocationCallbacks* pAllocator,
+	VkDebugUtilsMessengerEXT* pDebugMessenger) {
+
+	// Loads the function to create the Debug Messenger object.
+	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
+		vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+
+	if (func != nullptr) {
+		// If the function is valid, a call to it is made to create the Debug Messenger object and
+		// pass the said object's handle to the pointer
+		return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+	}
+	else {
+		return VK_ERROR_EXTENSION_NOT_PRESENT;
+	}
+}
+
+void DestroyDebugUtilsMessengerEXT(
+	VkInstance instance,
+	VkDebugUtilsMessengerEXT debugMessenger,
+	const VkAllocationCallbacks* pAllocator) {
+	// Similar to the CreateDebugUtilsMessengerEXT function, it loads the deletion function of 
+	// the debug Messenger Object and makes a call to it using said object.
+
+	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
+		vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+	if (func != nullptr) {
+		func(instance, debugMessenger, pAllocator);
+	}
+
+}
+
+static std::vector<char>readFile(const std::string& filename) {
+	std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+	if (!file.is_open()) {
+		throw std::runtime_error("failed to open file!");
+	}
+	size_t fileSize = (size_t)file.tellg();
+	std::vector<char> buffer(fileSize);
+	
+	file.seekg(0);
+	file.read(buffer.data(), fileSize);
+
+	file.close();
+
+	return buffer;
+}
+
+class HelloTriangleApplication {
+public:
+	void run() {
+		initWindow();
+		initVulkan();
+		mainLoop();
+		cleanup();
+	}
+private:
+	GLFWwindow* window;
+	VkInstance instance;
+	VkDebugUtilsMessengerEXT debugMessenger;
+	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+	VkDevice device;
+	VkQueue graphicsQueue;
+	VkQueue presentQueue;
+	VkSurfaceKHR surface;
+	VkSwapchainKHR swapChain;
+	std::vector<VkImage> swapChainImages;
+	VkFormat swapChainImageFormat;
+	VkExtent2D swapChainExtent;
+	std::vector<VkImageView> swapChainImageViews;
+	VkRenderPass renderPass;
+	VkPipelineLayout pipelineLayout;
+	VkPipeline graphicsPipeline;
+	std::vector<VkFramebuffer> swapChainFramebuffers;
+	VkCommandPool commandPool;
+	std::vector<VkCommandBuffer> commandBuffers;
+	VkSemaphore imageAvailableSemaphore;
+	VkSemaphore renderFinishedSemaphore;
+
+	void initWindow() {
+		// Initiates the GLFW library
+		glfwInit();
+		
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // Tells GLFW to not create an OpenGL context
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);	// Disable resizable window
+
+		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+	}
+
+	void initVulkan() {
+		createInstance();
+		setupDebugMessenger();
+		createSurface();
+		pickPhysicalDevice();
+		createLogicalDevice();
+		createSwapChain();
+		createImageViews();
+		createRenderPass();
+		createGraphicsPipeline();
+		createFramebuffers();
+		createCommandPool();
+		createCommandBuffers();
+		createSemaphores();
+	}
+
+	void mainLoop() {
+		// Event Handler
+		while (!glfwWindowShouldClose(window)) {
+			glfwPollEvents();
+			drawFrame();
+		}
+
+		vkDeviceWaitIdle(device);
+	}
+
+	void cleanup() {
+		// Here there is a choice for the Allocator function
+		vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
+		vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
+		// Here there is a choice for the Allocator function
+		vkDestroyCommandPool(device, commandPool, nullptr);
+		for (auto framebuffer : swapChainFramebuffers) {
+			vkDestroyFramebuffer(device, framebuffer, nullptr);
+		}
+		vkDestroyPipeline(device, graphicsPipeline, nullptr);
+		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+		vkDestroyRenderPass(device, renderPass, nullptr);
+		for (auto imageView : swapChainImageViews) {
+			vkDestroyImageView(device, imageView, nullptr);
+		}
+		vkDestroySwapchainKHR(device, swapChain, nullptr);
+		vkDestroyDevice(device, nullptr);
+		if (enableValidationLayers) {
+			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+		}
+		vkDestroySurfaceKHR(instance, surface, nullptr);
+		vkDestroyInstance(instance, nullptr);
+
+		glfwDestroyWindow(window);	// Cleanup Window Resources
+
+		glfwTerminate();	// Terminate GLFW Library
+	}
+
+
+
+	void createInstance() {
+		if (enableValidationLayers && !checkValidationLayerSupport()) {
+			throw std::runtime_error("validation layers requested, but not available!");
+		}
+
+		// Optional Info Struct for possible optimization information for the driver
+		VkApplicationInfo appInfo = {};
+		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+		appInfo.pApplicationName = "Hello Triangle";
+		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.pEngineName = "No Engine";
+		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.apiVersion = VK_API_VERSION_1_0;
+
+
+
+		// Fetch Required GLFW Extensions and extra Extensions requested
+		auto extensions = getRequiredExtensions();
+
+		// Check Required Extensions availability with Vulkan
+		if (enableValidationLayers && !checkExtensionSupport(extensions)) {
+			throw std::runtime_error("GLFW Extension not available!");
+		}
+
+		// Mandatory Information Struct that tells the Vulkan Driver which global 
+		// extensions and validation layers we want to use
+		VkInstanceCreateInfo createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		createInfo.pApplicationInfo = &appInfo;
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+		createInfo.ppEnabledExtensionNames = extensions.data();
+		
+		// The debugMessengerObject creation info is place here to ensure it's not destroyed
+		// before the vkCreateInstance call
+		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+		// Enabled, it adds the validation layers to the create Instance info
+		if (enableValidationLayers) {
+			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+			createInfo.ppEnabledLayerNames = validationLayers.data();
+			
+			// Adds a debugMessengerObject for the Creation of the Vulkan instance
+			// This a seperate debugMessengerObject used for the application since that one is dependend 
+			// on the Vulkan instance itself and can't debug its creation or destruction
+			populateDebugMessengerCreateInfo(debugCreateInfo);
+			createInfo.pNext = &debugCreateInfo;
+		}
+		else {
+			// Global validation layers are disabled;
+			createInfo.enabledLayerCount = 0;
+
+			createInfo.pNext = nullptr;
+		}
+
+		// Create Vulkan Instance 
+		// Here there is a choice for the Allocator function
+		if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create instance!");
+		}
+	}
+
+	bool checkValidationLayerSupport() {
+		/* Searches the available validation layers for the need validation layers
+		described in validationLayers.
+		Returns true if all are available, false otherwise.*/
+		uint32_t layerCount;
+		vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+		std::vector<VkLayerProperties> availableLayers(layerCount);
+		vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+		for (const char* layerName : validationLayers) {
+			bool layerFound = false;
+
+			for (const auto& layerProperties : availableLayers) {
+				if (strcmp(layerName, layerProperties.layerName) == 0) {
+					layerFound = true;
+					break;
+				}
+			}
+
+			if (!layerFound) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	std::vector<const char*> getRequiredExtensions() {
+		// GLFW extension information given by GLFW so Vulkan knows how to interact with the windows system(GLFW)
+		uint32_t glfwExtensionCount = 0;
+		const char** glfwExtensions;
+		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+		std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+		// Add the Debug Messenger Extension if validation layers are enabled
+		if (enableValidationLayers) {
+			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		}
+
+		return extensions;
+	}
+
+	bool checkExtensionSupport(std::vector<const char*> Extensions) {
+		// To check if other extensions are functional first get the number of extension available
+		uint32_t availableExtensionCount = 0;
+		vkEnumerateInstanceExtensionProperties(nullptr, &availableExtensionCount, nullptr);
+		// Allocate for the number of extensions
+		std::vector<VkExtensionProperties> availableExtensions(availableExtensionCount);
+		// Query the available extensions
+		vkEnumerateInstanceExtensionProperties(nullptr, &availableExtensionCount, availableExtensions.data());
+
+		std::cout << "Extension Needed:" << std::endl;
+
+		//for (uint32_t i = 0; i < ExtensionCount; i++) {
+		for (const char* extension : Extensions) {
+			bool extensionFound = false;
+			//const char* extension = Extensions[i];
+
+			std::cout << "\t" << extension;
+
+			for (const auto& availableExtension : availableExtensions) {
+				if (strcmp(extension, availableExtension.extensionName) == 0) {
+					extensionFound = true;
+					std::cout << " Checked" << std::endl;
+					break;
+				}
+			}
+
+			if (!extensionFound) {
+				std::cout << " Missing" << std::endl;
+				return false;
+			}
+
+		}
+
+		return true;
+
+	}
+
+	void setupDebugMessenger() {
+		if (!enableValidationLayers) return;
+
+		// Info Structure to create the Debug Messenger
+		VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
+		populateDebugMessengerCreateInfo(createInfo);
+		
+		// To create the Debug Messenger Object we have to load the Function that creates it since 
+		// its an extension function and therefor not loaded
+		// Here there is a choice for the Allocator function
+		if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) 
+			throw std::runtime_error("failed to set up debug messenger!");
+		
+		return;
+	}
+
+	// Automatic Population of a DebugMessengerCreateInfo struct
+	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+		createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		// Defines all the types of severities to trigger the callback
+		createInfo.messageSeverity =
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		// Same as Severity field 
+		createInfo.messageType =
+			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+		createInfo.pfnUserCallback = debugCallback;
+		createInfo.pUserData = nullptr; // Optional
+	}
+
+	///// Debug CallBack
+	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,		// Message Severity Level
+		VkDebugUtilsMessageTypeFlagsEXT messageType,				// Message Type 
+		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,	// Struct pointer to Important information
+																	// regarding the message such as
+																	// pMessage -> Debug Message as null-terminated string
+																	// pObjects -> Array of Vulkan Objects related to message
+																	// objectCount -> number of objects in array
+		void* pUserData) 											// Pointer to UserDefined data setup during Callback
+	{
+		// Debug Messenger Function Callback
+		if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+			// Message is important enough to show
+			std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+		}
+
+		// Returns boolean telling wether to abort the Vulkan call that triggered this function or not.
+		// Should be always VK_FALSE
+		return VK_FALSE;
+
+	};
+
+	void createSurface() {
+		// Here a Window Surface object is created for Vulkan to interact the window system. The necessary extensions
+		// were already added by the glfwGetRequiredInstanceExtensions call. While the window surface object is agnostic
+		// its creation isn't. Here the glfw already has a function that handles plataform specific problems for Vulkan
+		// so the code remains platform agnostic. Even so, for curiosity, here is the Windows platform specific code 
+		/*  // Windows window surface creation
+			VkWin32SurfaceCreateInfoKHR createInfo = {};
+			createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+			createInfo.hwnd = glfwGetWin32Window(window);
+			createInfo.hinstance = GetModuleHandle(nullptr);
+			if (vkCreateWin32SurfaceKHR(instance, &createInfo, nullptr,&surface) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create window surface!");
+			}
+		*/
+
+		// Here there is a choice for the Allocator function
+		if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create window surface!");
+		}
+	}
+
+	void pickPhysicalDevice() {
+		// List the available graphics card
+		uint32_t deviceCount = 0;
+		vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+		if (deviceCount == 0) {
+			throw std::runtime_error("failed to find GPUs with Vulkan Support!");
+		}
+		std::vector<VkPhysicalDevice> devices(deviceCount);
+		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+#ifdef PHYSICAL_DEVICE_SCORE_SELECTION
+		// Pick a Device based on a score rating
+		// Use an ordered map to automatically sort candidates by
+		// increasing score
+		std::multimap<int, VkPhysicalDevice> candidates;
+		
+		for (const auto& device : devices) {
+			int score = rateDeviceSuitability(device);
+			candidates.insert(std::make_pair(score, device));
+		}
+		// Check if the best candidate is suitable at all
+		if (candidates.rbegin()->first > 0) {
+			physicalDevice = candidates.rbegin()->second;
+		}
+#else
+		for (const auto& device : devices) {
+			if (isDeviceSuitable(device)) {
+				physicalDevice = device;
+				break;
+			}
+		}
+#endif
+
+		if (physicalDevice == VK_NULL_HANDLE) {
+			throw std::runtime_error("failed to find a suitable GPU!");
+		}
+	}
+
+#ifdef PHYSICAL_DEVICE_SCORE_SELECTION
+	int rateDeviceSuitability(VkPhysicalDevice device) {
+		VkPhysicalDeviceProperties deviceProperties;
+		vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+		VkPhysicalDeviceFeatures deviceFeatures;
+		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+		
+		int score = 0;
+
+		// Discrete GPUs have a significant performance advantage
+		if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+			score += 1000;
+		}
+
+		// Maximum possible size of textures affects graphics quality 
+		score += deviceProperties.limits.maxImageDimension2D;
+
+		// Further score checks can be made to improve performance.
+		// Example: Implement code to choose a device with a specific combination of queues families based 
+		// on their supported commands.
+
+		// Application can't function without geometry shaders
+		if (!isDeviceSuitable(device)) {
+			return 0;
+		}
+
+		return score;
+	}
+#endif
+	bool isDeviceSuitable(VkPhysicalDevice device) {
+		// Checks for Properties and Features supported by the device as well as the QueueFamilies attributes
+		//VkPhysicalDeviceProperties deviceProperties;
+		//vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+		//VkPhysicalDeviceFeatures deviceFeatures;
+		//vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+		// Example: Check if there is a Dedicated GPU that supports geometry shaders
+		//bool isSuitable = (bool)(deviceProperties.deviceType == VK_PHYSICIAL_DEVICE_TYPE_DISCRETE_GPU &&
+		//						deviceFeatures.geometryShader);
+	
+		bool extensionsSupported = checkDeviceExtensionSupport(device);
+		
+		// For windows renderings applications a surface is needed and swapchain support from the physical device is needed.
+		// Not only the extension need to be checked and enabled by the device but the supported swapchain needs to be queried
+		// for certains details to check if it is valid.
+		bool swapChainAdequate = false;
+		if (extensionsSupported) {
+			SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+			// For this tutorial is sufficient to have at least one supported Image format and one supported presentation mode
+			// for the given window surface.
+			swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+		}
+
+		return findQueueFamilies(device).isComplete() && extensionsSupported && swapChainAdequate;
+	}
+
+	bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
+		// Check device extensions for the list needed support
+		uint32_t extensionCount;
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+		std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+		for (const auto& extension : availableExtensions) {
+			requiredExtensions.erase(extension.extensionName);
+		}
+		return requiredExtensions.empty();
+	}
+
+	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+		QueueFamilyIndices indices;
+		// Logic to find queue family indices to populate struct with
+		uint32_t queueFamilyCount = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+		// Finds if the required queues families are supported by this device
+		int i = 0;
+		for (const auto& queueFamily : queueFamilies) {
+			// Check for graphics command support
+			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				indices.graphicsFamily.set_value(i);
+			}
+
+			// Checks for presentation support for the window surface
+			VkBool32 presentSupport = false;
+			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+			if (presentSupport)
+				indices.presentFamily.set_value(i);
+
+			if (indices.isComplete())
+				break;
+
+			i++;
+		}
+
+		// The indeces here represent each queue family. Most likely a lot of the requirements will be met by the same
+		// queue Family but throughout the code when a feature is required, there will be an individual index to call 
+		// a queue family even if it's repeated. However there is a benefit of improved perfomance in choosing a device
+		// with a minimal or specific combination of queues families. Further code can be added to the score function
+		// to help improve perfomance. Example: Pick a device with drawing and presentation support in the same queue
+
+		return indices;
+	}
+
+	void createLogicalDevice() {
+		// Logical devices don't interact directly with instances
+		 
+		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+		// Set of unique Queue Family index values. There is no repetition of indeces in a set.
+		std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value,indices.presentFamily.value };
+
+		float queuePriority = 1.0f;
+		// Loop over all necessary queueFamilies to create a vector of VkDeviceQueueCreationInfo
+		// This way using a set, will create a vector with only the necessary number of CreationInfo structs without
+		// repeating queue families.
+		for (uint32_t queueFamily : uniqueQueueFamilies) {
+			// Creation Info of a single Queue Family for the Logical Device
+			VkDeviceQueueCreateInfo queueCreateInfo = {};
+			queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+			queueCreateInfo.queueFamilyIndex = queueFamily;
+			queueCreateInfo.queueCount = 1;
+			// To schedule the command buffer execution of queues command, each queue is assigned a float from 0 to 1
+			queueCreateInfo.pQueuePriorities = &queuePriority;
+
+			queueCreateInfos.push_back(queueCreateInfo);
+			
+		}
+
+
+
+		// Info on the Device Features to use
+		VkPhysicalDeviceFeatures deviceFeatures = {};
+
+		// Logical Device Create Info struct
+		VkDeviceCreateInfo createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+		// Point to an array of Queue Families Create Info
+		createInfo.pQueueCreateInfos = queueCreateInfos.data();
+		createInfo.queueCreateInfoCount = static_cast<uint32_t> (queueCreateInfos.size());
+
+		// Physical Device feature to request support
+		createInfo.pEnabledFeatures = &deviceFeatures;
+
+		// No extensions are needed for now
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+
+		// Previous implementations required a separate validation Layer for each device separate from
+		// the Vulkan Instance Validation Layer. Up to date Implementations no longer make that distinction.
+		// To keep previous compatibility the properties are still setup here
+		if (enableValidationLayers) {
+			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+			createInfo.ppEnabledLayerNames = validationLayers.data();
+		}
+		else {
+			createInfo.enabledLayerCount = 0;
+		}
+
+		// Finally create the device and check for errors
+		// Here there is a choice for the Allocator function
+		if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create logical device!");
+		}
+
+		vkGetDeviceQueue(device, indices.graphicsFamily.value, 0, &graphicsQueue);
+		vkGetDeviceQueue(device, indices.presentFamily.value, 0, &presentQueue);
+	}
+
+	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) {
+		SwapChainSupportDetails details;
+		
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+		uint32_t formatCount;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+		if (formatCount != 0){
+			details.formats.resize(formatCount);
+			vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+		}
+
+		uint32_t presentModeCount;
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+
+		if (presentModeCount != 0) {
+			details.presentModes.resize(presentModeCount);
+			vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
+		}
+
+
+		return details;
+	}
+
+	void createSwapChain() {
+		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+
+		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+		uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+		if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+			imageCount = swapChainSupport.capabilities.maxImageCount;
+		}
+
+		VkSwapchainCreateInfoKHR createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+		createInfo.surface = surface;
+		createInfo.minImageCount = imageCount;
+		createInfo.imageFormat = surfaceFormat.format;
+		createInfo.imageColorSpace = surfaceFormat.colorSpace;
+		createInfo.imageExtent = extent;
+		// Number of Layers per Image. Always one unless for stereoscopic 3D application
+		createInfo.imageArrayLayers = 1;
+
+		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+		uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value,indices.presentFamily.value };
+
+		if (indices.graphicsFamily.value != indices.presentFamily.value) {
+			// Images can be used across multiple queue
+			// families without explicit ownership transfers.
+			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+			createInfo.queueFamilyIndexCount = 2;
+			createInfo.pQueueFamilyIndices = queueFamilyIndices;
+		}
+		else {
+			// An image is owned by one queue family
+			// at a time and ownership must be explicitly transfered before using it in
+			// another queue family.This option offers the best performance.
+			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.queueFamilyIndexCount = 0; // Optional
+			createInfo.pQueueFamilyIndices = nullptr; // Optional
+		}
+		//  We can specify that a certain transform should be applied to images in the
+		//	swap chain if it is supported(supportedTransforms in capabilities), like a
+		//	90 degree clockwise rotation or horizontal flip.To specify that you do not want
+		//	any transformation, simply specify the current transformation.
+		createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+
+		// Use Alpha channels to blend with other windows
+		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+
+		createInfo.presentMode = presentMode;
+		createInfo.clipped = VK_TRUE;
+
+		createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+		// Here there is a choice for the Allocator function
+		if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create swap chain!");
+		}
+		else {
+			printf("Successfuly created swap chain\n");
+		}
+
+		// Get the swap chain image handles. We only specified the minimum Image necessary for the swap chain so we 
+		// still need to query it for the number of images;
+		vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
+		swapChainImages.resize(imageCount);
+		vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
+
+		swapChainImageFormat = surfaceFormat.format;
+		swapChainExtent = extent;
+
+	}
+
+	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+		// Choose the formats of the image such as how pixels are organised, the amount of bits per channel
+		for (const auto& availableFormat : availableFormats) {
+			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+				return availableFormat;
+			}
+		}
+
+		return availableFormats[0];
+	}
+
+
+	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+		// Choose the method of queuing images in the swapchain to the window surface. It differentiates on how to handle
+		// full queue and choosing images from the queue.
+		for (const auto& availablePresentMode : availablePresentModes) {
+			if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+				return availablePresentMode;
+			}
+		}
+		return VK_PRESENT_MODE_FIFO_KHR;
+	}
+
+	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
+		if (capabilities.currentExtent.width != UINT32_MAX) {
+			return capabilities.currentExtent;
+		}
+		else {
+			VkExtent2D actualExtent = { WIDTH,HEIGHT };
+			actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width,actualExtent.width));
+			actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
+		
+			return actualExtent;
+		}
+	}
+
+	void createImageViews() {
+		swapChainImageViews.resize(swapChainImages.size());
+
+		for (size_t i = 0; i < swapChainImages.size(); i++) {
+			VkImageViewCreateInfo createInfo = {  };
+			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			createInfo.image = swapChainImages[i];
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			createInfo.format = swapChainImageFormat;
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			createInfo.subresourceRange.baseMipLevel = 0;
+			createInfo.subresourceRange.levelCount = 1;
+			createInfo.subresourceRange.baseArrayLayer = 0;
+			createInfo.subresourceRange.layerCount = 1;
+
+			// Here there is a choice for the Allocator function
+			if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create image views!");
+			}
+		}
+	}
+
+	void createRenderPass() {
+		// Attachment creation
+		VkAttachmentDescription colorAttachment = {};
+		colorAttachment.format = swapChainImageFormat;
+		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		//• VK_ATTACHMENT_LOAD_OP_DONT_CARE : Existing contents are undefined;
+		//• VK_ATTACHMENT_LOAD_OP_LOAD : Preserve the existing contents of the attachment
+		//• VK_ATTACHMENT_LOAD_OP_CLEAR : Clear the values to a constant at the	start
+		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		//• VK_ATTACHMENT_STORE_OP_DONT_CARE: Contents of the framebuffer will be undefined after the rendering operation
+		//• VK_ATTACHMENT_STORE_OP_STORE : Rendered contents will be stored in memory and can be read later
+		//We’re interested in seeing the rendered triangle on the screen, so we’re going with the store operation here.
+		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		//Textures and framebuffers in Vulkan are represented by VkImage objects with a certain pixel format,	
+		//however the layout of the pixels in memory can change based on what you’re trying to do with an image.
+		//• VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : Images used as color attachment
+		//• VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : Images to be presented in the swap chain
+		//• VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : Images to be used as destination for a memory copy operation
+		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+		// Reference to point to the attachment in the attachment array
+		VkAttachmentReference colorAttachmentRef = {};
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout =  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		// Create first subpass with one attachment
+		VkSubpassDescription subpass = {};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+
+		//The following other types of attachments can be referenced by a subpass :
+		//• pInputAttachments : Attachments that are read from a shader
+		//• pResolveAttachments : Attachments used for multisampling color attachments
+		//• pDepthStencilAttachment : Attachment for depth and stencil data
+		//• pPreserveAttachments : Attachments that are not used by this subpass,	but for which the data must be preserved
+		
+		// Create the Render pass with arguments of the subpasses used and the attachments to refer to.
+		VkRenderPassCreateInfo renderPassInfo = {};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.attachmentCount = 1;
+		renderPassInfo.pAttachments = &colorAttachment;
+		renderPassInfo.subpassCount = 1;
+		renderPassInfo.pSubpasses = &subpass;
+		
+		// Subpass dependecies
+		VkSubpassDependency dependency = {};
+		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependency.dstSubpass = 0;
+		//The first two fields specify the indices of the dependency and the dependent subpass.
+		//The special value VK_SUBPASS_EXTERNAL refers to the implicit subpass before or after the render 
+		//pass depending on whether it is specified in srcSubpass or dstSubpass.The index 0 refers to our
+		//subpass, which is the first and only one.The dstSubpass must always be higher than srcSubpass to 
+		//prevent cycles in the dependency graph
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.srcAccessMask = 0;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		renderPassInfo.dependencyCount = 1;
+		renderPassInfo.pDependencies = &dependency;
+
+		// Here there is a choice for the Allocator function
+		if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create render pass!");
+		}
+
+	}
+
+	VkShaderModule createShaderModule(const std::vector<char>& code) {
+		VkShaderModuleCreateInfo createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		createInfo.codeSize = code.size();
+		// The byte code must be in uint32_t format with the same alignment requirements. Luckily the std::vector
+		// default allocator already meet the worst case alignment requirements.
+		createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+		VkShaderModule shaderModule;
+		// Here there is a choice for the Allocator function
+		if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create shader module!");
+		}
+		else {
+			printf("Successfuly created Shader Module!\n");
+		}
+
+		return shaderModule;
+	}
+
+	void createGraphicsPipeline() {
+		auto vertShaderCode = readFile("../../VulkanTutorial/vert.spv");
+		auto fragShaderCode = readFile("../../VulkanTutorial/frag.spv");
+
+		// Shader modules are only a thin wrapper around the shader bytecode. 
+		// As soon as the graphics pipeline is created the shader modules are no longer needed
+		// hence these can be made as local variables instead of class members. They must be 
+		// destroyed by as call of vkDestroyShaderModule
+		VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+		VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
+		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		// Tells which pipeline stage the shader is going to be used.
+		vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		vertShaderStageInfo.module = vertShaderModule;
+		vertShaderStageInfo.pName = "main";
+	/*	There is one more(optional) member, pSpecializationInfo, which we won’t
+		be using here, but is worth discussing.It allows you to specify values for shader
+		constants.You can use a single shader module where its behavior can be configured
+		at pipeline creation by specifying different values for the constants used in
+		it.This is more efficient than configuring the shader using variables at render
+		time, because the compiler can do optimizations like eliminating if statements
+		that depend on these values.*/
+		vertShaderStageInfo.pSpecializationInfo = nullptr;
+
+		// Now the same for the fragment shader
+		VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
+		fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		// Tells which pipeline stage the shader is going to be used.
+		fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		fragShaderStageInfo.module = fragShaderModule;
+		fragShaderStageInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,fragShaderStageInfo };
+
+		// Prebuilt Fixed Functions Stage
+		// Vertex Input
+		// This stage tells how to load the vertex data and describes the format of the atributes as well spacing 
+		// and per-vertex and per-instance information.
+		VkPipelineVertexInputStateCreateInfo vertexInputInfo = {}; 
+		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vertexInputInfo.vertexBindingDescriptionCount = 0;
+		vertexInputInfo.pVertexBindingDescriptions = nullptr;
+		vertexInputInfo.vertexAttributeDescriptionCount = 0;
+		vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+		// Input Assembly
+		VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+		inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	//		VK_PRIMITIVE_TOPOLOGY_POINT_LIST: points from vertices
+	//		VK_PRIMITIVE_TOPOLOGY_LINE_LIST : line from every 2 vertices without reuse
+	//		VK_PRIMITIVE_TOPOLOGY_LINE_STRIP : the end vertex of every line is used as start vertex for the next line
+	//		VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : triangle from every 3 vertices without reuse
+	//		VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : the second and third vertex of every triangle are used as first two
+	//	vertices of the next triangle
+		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+		// Viewports
+		// A viewport basically describes the region of the framebuffer that the output will
+		// be rendered to.This will almost always be(0, 0) to(width, height)
+		VkViewport viewport = {};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float) swapChainExtent.width;
+		viewport.height = (float) swapChainExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0;
+
+		// Scissor 
+		// Describes which pixels will actually be stored. In essence cuts the display of the framebuffer
+		// including the viewport region.
+		// Here we will draw on the entire framebuffer so the scissor should cover all of it.
+		VkRect2D scissor = {};
+		scissor.offset = { 0,0 };
+		scissor.extent = swapChainExtent;
+
+		// Now to combine both the viewport and scissor to a viewport state. 
+		// Multiple viewports and scissors rectangle can be combined on some graphics card hence these will be 
+		// passed as array. It requires enabling a GPU Feature in logical device creation.
+		VkPipelineViewportStateCreateInfo viewportState = {};
+		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		viewportState.viewportCount = 1;
+		viewportState.pViewports = &viewport;
+		viewportState.scissorCount = 1;
+		viewportState.pScissors = &scissor;
+
+		// Rasterizer
+		VkPipelineRasterizationStateCreateInfo rasterizer = {};
+		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		// If this is true then fragments beyond the near and far plane are clamped instead of discarded. 
+		// Useful for things like shadow maps. It requires enabling a GPU Feature in logical device creation.
+		rasterizer.depthClampEnable = VK_FALSE;
+		// This if true disables any output to the framebuffer. The Geometry never passes through the rasterizer stage.
+		rasterizer.rasterizerDiscardEnable = VK_FALSE;
+		// VK_POLYGON_MODE_FILL: fill the area of the polygon with fragments
+		// VK_POLYGON_MODE_LINE : polygon edges are drawn as lines
+		// VK_POLYGON_MODE_POINT : polygon vertices are drawn as points
+		// Using any mode other than fill requires enabling a GPU feature.
+		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		// Any line thicker than 1.0f requires you to enable the wideLines GPU feature.
+		rasterizer.lineWidth = 1.0f;
+
+		// A whole buttload of configurations
+		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+		rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+		rasterizer.depthBiasClamp = VK_FALSE;
+		rasterizer.depthBiasConstantFactor = 0.0f; // Optional
+		rasterizer.depthBiasClamp = 0.0f; // Optional
+		rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
+
+		// MultiSampling
+		// It requires enabling a GPU Feature in logical device creation.
+		VkPipelineMultisampleStateCreateInfo multisampling = {};
+		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		multisampling.sampleShadingEnable = VK_FALSE;
+		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+		multisampling.minSampleShading = 1.0f; // Optional
+		multisampling.pSampleMask = nullptr; // Optional
+		multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
+		multisampling.alphaToOneEnable = VK_FALSE; // Optional
+
+		// Depth and stencil testing
+		// Not used right now so only a nullptr will be passed
+
+		// Color Blending struct describing the operation
+		VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
+		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		colorBlendAttachment.blendEnable = VK_FALSE;
+		colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+		colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+		
+		// // Pseudo Code explaining the above struct
+		//if (blendEnable) {
+		//	finalColor.rgb = (srcColorBlendFactor * newColor.rgb)
+		//		< colorBlendOp > (dstColorBlendFactor * oldColor.rgb);
+		//	finalColor.a = (srcAlphaBlendFactor * newColor.a) < alphaBlendOp >
+		//		(dstAlphaBlendFactor * oldColor.a);
+		//}
+		//else {
+		//	finalColor = newColor;
+		//}
+		//finalColor = finalColor & colorWriteMask;
+		
+		// Alpha Blending
+		//finalColor.rgb = newAlpha * newColor + (1 - newAlpha) * oldColor;
+		//finalColor.a = newAlpha.a;
+		// The struct that acomplishes it
+		//colorBlendAttachment.blendEnable = VK_TRUE;
+		//colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+		//colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		//colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+		//colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		//colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		//colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+		// Struct to gather all color blend for all of the framebuffers
+		VkPipelineColorBlendStateCreateInfo colorBlending = {};
+		colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		colorBlending.logicOpEnable = VK_FALSE;
+		colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
+		colorBlending.attachmentCount = 1;
+		colorBlending.pAttachments = &colorBlendAttachment;
+		colorBlending.blendConstants[0] = 0.0f; // Optional
+		colorBlending.blendConstants[1] = 0.0f; // Optional
+		colorBlending.blendConstants[2] = 0.0f; // Optional
+		colorBlending.blendConstants[3] = 0.0f; // Optional
+
+
+		// Dynamic States
+		// Some states can be changed without recreating the pipeline like viewport, linewidth and blend constants
+		// The dynamic states can be created like this.
+		//VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_LINE_WIDTH};
+		//VkPipelineDynamicStateCreateInfo dynamicState = {};
+		//dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		//dynamicState.dynamicStateCount = 2;
+		//dynamicState.pDynamicStates = dynamicStates;
+
+		// If defined, the set values will be ignored and must be specified at drawing time.
+
+		// Unidoem values in shaders are similar to dynamics states. Can be changed at drawing time to alter shaders
+		// without recreating them. Most commonly used for transformation matrix and texture samplers.
+		// Can be specified at the pipeline creation with a VkPipelineLayout object. This is required with or without using uniform values.
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.setLayoutCount = 0; // Optional
+		pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
+		pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
+		pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
+
+		// Here there is a choice for the Allocator function
+		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create pipeline layout!");
+		}
+
+		VkGraphicsPipelineCreateInfo pipelineInfo = {};
+		pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		// Shaders
+		pipelineInfo.stageCount = 2;
+		pipelineInfo.pStages = shaderStages;
+		// Fixed Functions
+		pipelineInfo.pVertexInputState = &vertexInputInfo;
+		pipelineInfo.pInputAssemblyState = &inputAssembly;
+		pipelineInfo.pViewportState = &viewportState;
+		pipelineInfo.pRasterizationState = &rasterizer;
+		pipelineInfo.pMultisampleState = &multisampling;
+		pipelineInfo.pDepthStencilState = nullptr; // Optional
+		pipelineInfo.pColorBlendState = &colorBlending;
+		pipelineInfo.pDynamicState = nullptr; // Optional
+		// Layout
+		pipelineInfo.layout = pipelineLayout;
+		// Render Pass
+		pipelineInfo.renderPass = renderPass;
+		pipelineInfo.subpass = 0;
+		// Vulkan allows you to create a new graphics pipeline by deriving from an existing pipeline.
+		// These values are only used if the VK_PIPELINE_CREATE_DERIVATIVE_BIT flag
+		// is also specified in the flags field of VkGraphicsPipelineCreateInfo.
+		pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
+		pipelineInfo.basePipelineIndex = -1; // Optional
+
+		// Multiple graphics pipeline can be created at the sametime;
+		// Here there is a choice for the Allocator functio
+		if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create graphics pipeline");
+		}
+
+		// Here there is a choice for the Allocator function
+		vkDestroyShaderModule(device, fragShaderModule, nullptr);
+		vkDestroyShaderModule(device, vertShaderModule, nullptr);
+	}
+
+	void createFramebuffers() {
+		swapChainFramebuffers.resize(swapChainImageViews.size());
+
+		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+			VkImageView attachments[] = { swapChainImageViews[i] };
+
+			VkFramebufferCreateInfo framebufferInfo = {};
+			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferInfo.renderPass = renderPass;
+			framebufferInfo.attachmentCount = 1;
+			framebufferInfo.pAttachments = attachments;
+			framebufferInfo.width = swapChainExtent.width;
+			framebufferInfo.height = swapChainExtent.height;
+			framebufferInfo.layers = 1;
+
+			// Here there is a choice for the Allocator function
+			if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create framebuffer!");
+			}
+		}
+	}
+
+	void createCommandPool() {
+		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+
+		VkCommandPoolCreateInfo poolInfo = {};
+		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value;
+		// Command Pool Flags
+		//• VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new 
+		//	commands very often(may change memory allocation behavior)
+		//• VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : Allow command buffers to be rerecorded 
+		//	individually, without this flag they all have to be reset together
+		poolInfo.flags = 0; // Optional
+
+		// Here there is a choice for the Allocator function
+		if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create command pool!");
+		}
+	}
+
+	void createCommandBuffers() {
+		commandBuffers.resize(swapChainFramebuffers.size());
+
+		VkCommandBufferAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.commandPool = commandPool;
+		//• VK_COMMAND_BUFFER_LEVEL_PRIMARY : Can be submitted to a queue for execution, but cannot be called from other command buffers.
+		//• VK_COMMAND_BUFFER_LEVEL_SECONDARY : Cannot be submitted directly, but can be called from primary command buffers.
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
+
+		if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate command buffers!");
+		}
+
+		for (size_t i = 0; i < commandBuffers.size(); i++) {
+			VkCommandBufferBeginInfo beginInfo = {};
+			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			//• VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT : The command buffer will be rerecorded right after 
+			//	executing it once.
+			//• VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : This is a secondary command buffer that will be 
+			//	entirely within a single render pass.
+			//• VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also 
+			//	already pending execution.
+			beginInfo.flags = 0; // OPtional
+			beginInfo.pInheritanceInfo = nullptr; // Optional
+
+			if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS){
+				throw std::runtime_error("failed to begin recording command buffer!");	
+			}
+
+			VkRenderPassBeginInfo renderPassInfo = {};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassInfo.renderPass = renderPass;
+			renderPassInfo.framebuffer = swapChainFramebuffers[i];
+			renderPassInfo.renderArea.offset = { 0,0 };
+			renderPassInfo.renderArea.extent = swapChainExtent;
+			
+			VkClearValue clearColor = { 0.0f,0.0f,0.0f,1.0f };
+			renderPassInfo.clearValueCount = 1;
+			renderPassInfo.pClearValues = &clearColor;
+
+			//All of the functions that record commands can be recognized by their vkCmd prefix.
+
+			//• VK_SUBPASS_CONTENTS_INLINE : The render pass commands will be embedded in the primary command 
+			//	buffer itself and no secondary command buffers will be executed.
+			//• VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : The render pass commands will be executed
+			//	from secondary command buffers.
+			vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+			vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+			//• vertexCount : Even though we don’t have a vertex buffer, we technically
+			//	still have 3 vertices to draw.
+			//• instanceCount : Used for instanced rendering, use 1 if you’re not doing
+			//	that.
+			//• firstVertex : Used as an offset into the vertex buffer, defines the lowest
+			//	value of gl_VertexIndex.
+			//• firstInstance : Used as an offset for instanced rendering, defines the
+			//	lowest value of gl_InstanceIndex.
+			vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+
+			vkCmdEndRenderPass(commandBuffers[i]);
+
+			if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
+				throw std::runtime_error("failed to record command buffer!");
+			}
+		}
+
+	}
+
+	void createSemaphores() {
+		VkSemaphoreCreateInfo semaphoreInfo = {};
+		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		// Here there is a choice for the Allocator function
+		if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
+			vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create semaphores!");
+		}
+	}
+
+	void drawFrame() {
+		// The drawFrame function perform three operations:
+		//	• Acquire an image from the swap chain
+		//	• Execute the command buffer with that image as attachment in the framebuffer
+		//	• Return the image to the swap chain for presentation
+		// However the functions that acomplish this return before the operation is actually finished and each operation depends
+		// on the previous one being finished. To syncronize them we need semaphores which are use for syncronizing operations within
+		// or across command queues. If we want to syncronize calls between the application and the rendering operations, we should use fences instead.
+		uint32_t imageIndex;
+		//• Logical Device
+		//• Swap Chain to get the image
+		//• Timeout in nanoseconds for the image to become available. The max value of 64 bit unsigned integer disables it
+		//• Semaphore to signal when finished
+		//• Fence to signal when finished
+		//• Output index of image in the swap chain
+		vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+		
+		VkSubmitInfo submitInfo = {};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		
+		//We want to wait with writing colors to the image until it’s available, so we’re specifying the stage of
+		//the graphics pipeline that writes to the color attachment.That means that theoretically the 
+		//implementation can already start executing our vertex shader and such while the image is not yet available.
+		//Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores.
+		VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };
+
+		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.pWaitSemaphores = waitSemaphores;
+		submitInfo.pWaitDstStageMask = waitStages;
+
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+
+		VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = signalSemaphores;
+		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+			throw std::runtime_error("failed to submit draw comand buffer!");
+		}
+
+		VkPresentInfoKHR presentInfo = {};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		//The first two parameters specify which semaphores to wait on before presentation
+		//can happen, just like VkSubmitInfo.
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = signalSemaphores;
+
+		VkSwapchainKHR swapChains[] = { swapChain };
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = swapChains;
+		presentInfo.pImageIndices = &imageIndex;
+		presentInfo.pResults = nullptr; // Optional
+
+		vkQueuePresentKHR(presentQueue, &presentInfo);
+
+		// Because we are not waiting for the presentation to finish and continuosly running drawFrame
+		// The cpu might be submitting more work than what the gpu can handle. Also the imageAvailableSemaphore
+		// and renderFinishedSemaphore semaphores will be used with multiple frames at a time. If we use vkQueueWaitIdle
+		// we syncronize in a rudimentary way but the GPU will have to only process one frame at the time which is not
+		// efficient.
+		vkQueueWaitIdle(presentQueue);
+	}
+};
+
+
+int main() {
+	compileShaders();
+	HelloTriangleApplication app;
+
+	try {
+		app.run();
+	}
+	catch (const std::exception& e) {
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+
+
+	return EXIT_SUCCESS;
+
+}
