@@ -1579,6 +1579,9 @@ private:
 
 	void createVertexBuffer() {
 		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+		//VkBuffer stagingBuffer;
+		//VkDeviceMemory stagingBufferMemory;
 		createBuffer(bufferSize,
 			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
