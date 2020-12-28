@@ -61,14 +61,19 @@ struct optional{
 		value = v;
 		has_value = true;
 	};
+	void reset_value() {
+		value = 0;
+		has_value = false;
+	}
 };
 
 struct QueueFamilyIndices {
 	optional graphicsFamily;
 	optional presentFamily;
+	optional transferFamily;
 
 	bool isComplete() {
-		return graphicsFamily.has_value && presentFamily.has_value;
+		return graphicsFamily.has_value && presentFamily.has_value && transferFamily.has_value;
 	}
 };
 
@@ -84,7 +89,7 @@ const int HEIGHT = 480;
 const int MAX_FRAME_IN_FLIGHT = 2;
 
 const std::vector<Vertex> vertices = {
-	{ {1.0f,-1.0f}, {0.0f, 1.0f, 0.0f}},
+	{ {1.0f,0.0f}, {0.0f, 1.0f, 0.0f}},
 	{ {1.0f, 0.5f}, {0.0f, 1.0f, 0.0f}},
 	{ {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
 };
@@ -176,6 +181,7 @@ private:
 	VkDevice device;
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
+	VkQueue transferQueue;
 	VkSurfaceKHR surface;
 	VkSwapchainKHR swapChain;
 	std::vector<VkImage> swapChainImages;
@@ -187,6 +193,7 @@ private:
 	VkPipeline graphicsPipeline;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
 	VkCommandPool commandPool;
+	VkCommandPool transientcommandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
 	std::vector<VkSemaphore> imageAvailableSemaphore;
 	std::vector<VkSemaphore> renderFinishedSemaphore;
@@ -260,6 +267,7 @@ private:
 		}
 		// Here there is a choice for the Allocator function
 		vkDestroyCommandPool(device, commandPool, nullptr);
+		vkDestroyCommandPool(device, transientcommandPool, nullptr);
 		vkDestroyDevice(device, nullptr);
 
 		if (enableValidationLayers) {
@@ -273,7 +281,21 @@ private:
 		glfwTerminate();	// Terminate GLFW Library
 	}
 
+	void cleanupSwapChain() {
+		for (size_t i = 0; i < swapChainFramebuffers.size(); i++) {
+			vkDestroyFramebuffer(device, swapChainFramebuffers[i], nullptr);
+		}
+		vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 
+		vkDestroyPipeline(device, graphicsPipeline, nullptr);
+		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+		vkDestroyRenderPass(device, renderPass, nullptr);
+
+		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+			vkDestroyImageView(device, swapChainImageViews[i], nullptr);
+		}
+		vkDestroySwapchainKHR(device, swapChain, nullptr);
+	}
 
 	void createInstance() {
 		if (enableValidationLayers && !checkValidationLayerSupport()) {
@@ -628,6 +650,10 @@ private:
 			if (presentSupport)
 				indices.presentFamily.set_value(i);
 
+			// Query for a queue with tranfer operation but not for graphics operations
+			if ((queueFamily.queueFlags & (VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT)) == VK_QUEUE_TRANSFER_BIT)
+				indices.transferFamily.set_value(i);
+
 			if (indices.isComplete())
 				break;
 
@@ -650,7 +676,7 @@ private:
 
 		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 		// Set of unique Queue Family index values. There is no repetition of indeces in a set.
-		std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value,indices.presentFamily.value };
+		std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value,indices.presentFamily.value,indices.transferFamily.value };
 
 		float queuePriority = 1.0f;
 		// Loop over all necessary queueFamilies to create a vector of VkDeviceQueueCreationInfo
@@ -708,6 +734,9 @@ private:
 
 		vkGetDeviceQueue(device, indices.graphicsFamily.value, 0, &graphicsQueue);
 		vkGetDeviceQueue(device, indices.presentFamily.value, 0, &presentQueue);
+		// Transfer Challenge:
+		// Use a different queue family and queue specifically for transfer operations.
+		vkGetDeviceQueue(device, indices.transferFamily.value, 0, &transferQueue);
 	}
 
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) {
@@ -761,9 +790,14 @@ private:
 		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 		uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value,indices.presentFamily.value };
 
+		// Sharing Mode of images across queue families
+		//• VK_SHARING_MODE_EXCLUSIVE : An image is owned by one queue family
+		//	at a time and ownership must be explicitly transfered before using it in
+		//	another queue family.This option offers the best performance.
+		//• VK_SHARING_MODE_CONCURRENT : Images can be used across multiple queue
+		//	families without explicit ownership transfers.
+		// To avoid involving ownership concepts we choose Concurrent mode.
 		if (indices.graphicsFamily.value != indices.presentFamily.value) {
-			// Images can be used across multiple queue
-			// families without explicit ownership transfers.
 			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 			createInfo.queueFamilyIndexCount = 2;
 			createInfo.pQueueFamilyIndices = queueFamilyIndices;
@@ -1252,6 +1286,19 @@ private:
 		if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create command pool!");
 		}
+
+
+		// Transfer Challenge & Transient Command Pool Challenge:
+		// Create a transient pool for short lived command buffers for memory allocation optimizations.
+		VkCommandPoolCreateInfo transientpoolInfo = {};
+		transientpoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		transientpoolInfo.queueFamilyIndex = queueFamilyIndices.transferFamily.value;
+		transientpoolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+
+		// Here there is a choice for the Allocator function
+		if (vkCreateCommandPool(device, &transientpoolInfo, nullptr, &transientcommandPool) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create transient command pool!");
+		}
 	}
 
 	void createCommandBuffers() {
@@ -1279,6 +1326,9 @@ private:
 			//• VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also 
 			//	already pending execution.
 			beginInfo.flags = 0; // OPtional
+			//  The pInheritanceInfo parameter is only relevant for secondary command
+			//	buffers.It specifies which state to inherit from the calling primary command
+			//	buffers.
 			beginInfo.pInheritanceInfo = nullptr; // Optional
 
 			if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS){
@@ -1485,22 +1535,6 @@ private:
 		currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 	}
 
-	void cleanupSwapChain() {
-		for (size_t i = 0; i < swapChainFramebuffers.size(); i++) {
-			 vkDestroyFramebuffer(device, swapChainFramebuffers[i],nullptr);
-		}
-		vkFreeCommandBuffers(device, commandPool,static_cast<uint32_t>(commandBuffers.size()),commandBuffers.data());
-		
-		vkDestroyPipeline(device, graphicsPipeline, nullptr);
-		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-		vkDestroyRenderPass(device, renderPass, nullptr);
-	
-		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-			vkDestroyImageView(device, swapChainImageViews[i], nullptr);
-		}
-		vkDestroySwapchainKHR(device, swapChain, nullptr);
-	}
-
 	void recreateSwapChain() {
 		// Swap chain recreation for events like window resizing
 
@@ -1546,7 +1580,25 @@ private:
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufferInfo.size = size;
 		bufferInfo.usage = usage;
-		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		// Transfer Challenge:
+		// Use a different queue family and queue specifically for transfer operations.
+		// If we're  using the buffer on different queue families we can either choose sharing mode exclusive
+		// and resolve ownership issues or choose sharing mode concurrent where we are required to specify 
+		// the different queue families that will be using the buffer. The former option offers better performance.
+		// In this function, I differentiate between using different and single queue families by specifying 
+		// th VK_BUFFER_USAGE_TRANSFER_DST_BIT flag or not, respectively.
+		if (usage & VK_BUFFER_USAGE_TRANSFER_DST_BIT) {
+			QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+			uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value,indices.transferFamily.value };
+			bufferInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+			bufferInfo.queueFamilyIndexCount = 2;
+			bufferInfo.pQueueFamilyIndices = queueFamilyIndices;
+		}
+		else {
+			bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		}
+
 		bufferInfo.flags = 0; // The flags parameter is used to configure sparse buffer memory
 		if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create buffer!");
@@ -1580,21 +1632,78 @@ private:
 	void createVertexBuffer() {
 		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-		//VkBuffer stagingBuffer;
-		//VkDeviceMemory stagingBufferMemory;
+		// Create a host visible buffer
+		VkBuffer stagingBuffer;
+		VkDeviceMemory stagingBufferMemory;
 		createBuffer(bufferSize,
-			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			vertexBuffer,
-			vertexBufferMemory);
+			stagingBuffer,
+			stagingBufferMemory);
 
 		// To copy the vertices data to the allocated memory we need query a pointer to copy
 		void* data;
 		// Map the memory allocated to a CPU accessible memory
-		vkMapMemory(device, vertexBufferMemory, 0, bufferSize, 0, &data);
-		// Copy the vert
+		vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+		// Copy the vertices data
 		memcpy(data, vertices.data(), (size_t)bufferSize);
-		vkUnmapMemory(device, vertexBufferMemory);
+		vkUnmapMemory(device, stagingBufferMemory);
+		
+		createBuffer(bufferSize, 
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer,
+			vertexBufferMemory);
+		copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
+		vkDestroyBuffer(device, stagingBuffer, nullptr);
+		vkFreeMemory(device, stagingBufferMemory, nullptr);
+	}
+	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+		// To copy between buffer we must submit a command. We're going to create a
+		// temporary command buffer to do so. We can use a separate command pool with the
+		// VK_COMMAND_POOL_CREATE_TRANSIENT_BIT flag when creating it.
+		VkCommandBufferAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandPool = transientcommandPool;
+		allocInfo.commandBufferCount = 1;
+		
+		VkCommandBuffer commandBuffer;
+		vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+
+		VkCommandBufferBeginInfo beginInfo = {};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+		// How to copy contents between buffers.
+		VkBufferCopy copyRegion = {};
+		copyRegion.srcOffset = 0; // Optional
+		copyRegion.dstOffset = 0; // Optional
+		copyRegion.size = size; // It is not possible to specify VK_WHOLE_SIZE here, unlike the vkMapMemory command
+		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+		vkEndCommandBuffer(commandBuffer);
+
+		VkSubmitInfo submitInfo = {};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
+		
+		vkQueueSubmit(transferQueue, 1, &submitInfo, VK_NULL_HANDLE);
+		// Unlike the draw commands, there are no events we need to wait on this time.
+		// We just want to execute the transfer on the buffers immediately.There are
+		// again two possible ways to wait on this transfer to complete.We could use a
+		// fence and wait with vkWaitForFences, or simply wait for the transfer queue
+		// to become idle with vkQueueWaitIdle.A fence would allow you to schedule
+		// multiple transfers simultaneously and wait for all of them complete, instead
+		// of executing one at a time.That may give the driver more opportunities to
+		// optimize.
+		vkQueueWaitIdle(transferQueue);
+		// Memory that is bound to a buffer object may be freed once
+		// the buffer is no longer used, so let’s free it after the buffer has been destroyed
+		vkFreeCommandBuffers(device, transientcommandPool, 1, &commandBuffer);
 	}
 };
 
