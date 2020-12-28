@@ -23,20 +23,46 @@
 struct Vertex {
 	glm::vec2 pos;
 	glm::vec3 color;
+};
 
-	static VkVertexInputBindingDescription getBindingDescription() {
+struct Triangle {
+	// Define a triangle with 3 vertices and translation + rotation matrix
+	Vertex points[3];
+	glm::vec3 line1;
+	glm::vec3 line2;
+	glm::vec3 line3;
+
+	Triangle() {
+		points[0] = { {0.0f,-0.5f},  {0.0f, 1.0f, 0.0f} };
+		points[1] = { {0.5f, 0.5f}, {0.0f, 1.0f, 0.0f} };
+		points[2] = { {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f} };
+		line1 = { 0.1f,0.0f,0.8f };
+		line2 = { 0.0f,0.5f,0.0f };
+		line3 = { 0.5f,0.0f,1.0f };
+	};
+
+	static std::array<VkVertexInputBindingDescription, 2> getBindingDescriptions() {
+		// Define an array of two bindings. The first is for the points and tells the application to 
+		// to read the attributes (Position and Color) per vertex. The second binding tells to read matrix attribute
+		// per triangle. This way the same matrix is shared for the three vertices.
+
 		// Binding Description tells the rate at which vertex data is coming in
-		VkVertexInputBindingDescription bindingDescription = {};
-		bindingDescription.binding = 0;								// Binding index of this binding in the binding array
-		bindingDescription.stride = sizeof(Vertex);					// Stride between each vertex data 
+		std::array<VkVertexInputBindingDescription, 2>bindingDescriptions = {};
+		bindingDescriptions[0].binding = 0;								// Binding index of this binding in the binding array
+		bindingDescriptions[0].stride = sizeof(Vertex);					// Stride between each vertex data 
 		// • VK_VERTEX_INPUT_RATE_VERTEX : Move to the next data entry after each vertex
 		// • VK_VERTEX_INPUT_RATE_INSTANCE : Move to the next data entry after each instance
-		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-		return bindingDescription;
+		bindingDescriptions[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+		// Binding Description tells the rate at which the matrix data is coming in
+		bindingDescriptions[1].binding = 1;									// Binding index of this binding in the binding array
+		bindingDescriptions[1].stride = sizeof(Triangle);					// Stride between each vertex data
+		bindingDescriptions[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+		return bindingDescriptions;
 	}
-	static std::array<VkVertexInputAttributeDescription, 2>getAttributeDescriptions() {
+	static std::array<VkVertexInputAttributeDescription, 5>getAttributeDescriptions() {
 		// This struct tells how to extract a vertex attribute from a vertex. Since we have two attributes, position and color, we have an array of two structs.
-		std::array<VkVertexInputAttributeDescription, 2>attributeDescriptions = {};
+		std::array<VkVertexInputAttributeDescription, 5>attributeDescriptions = {};
 		attributeDescriptions[0].binding = 0;
 		attributeDescriptions[0].location = 0;
 		//• float: VK_FORMAT_R32_SFLOAT
@@ -44,15 +70,31 @@ struct Vertex {
 		//• vec3 : VK_FORMAT_R32G32B32_SFLOAT
 		//• vec4 : VK_FORMAT_R32G32B32A32_SFLOAT
 		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-		attributeDescriptions[0].offset = offsetof(Vertex, pos);
+		attributeDescriptions[0].offset = offsetof(Triangle, points[0].pos);
 
 		attributeDescriptions[1].binding = 0;
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-		attributeDescriptions[1].offset = offsetof(Vertex, color);
+		attributeDescriptions[1].offset = offsetof(Triangle, points[0].color);
+
+		attributeDescriptions[2].binding = 1;
+		attributeDescriptions[2].location = 2;
+		attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[2].offset = offsetof(Triangle, line1);
+
+		attributeDescriptions[3].binding = 1;
+		attributeDescriptions[3].location = 3;
+		attributeDescriptions[3].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[3].offset = offsetof(Triangle, line2);
+
+		attributeDescriptions[4].binding = 1;
+		attributeDescriptions[4].location = 4;
+		attributeDescriptions[4].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[4].offset = offsetof(Triangle, line3);
 		return attributeDescriptions;
 	}
 };
+
 struct optional{
 	uint32_t value;
 	bool has_value;
@@ -87,12 +129,32 @@ const int WIDTH = 640;
 const int HEIGHT = 480;
 // Number of frames to be processed concurrently(simultaneously)
 const int MAX_FRAME_IN_FLIGHT = 2;
+//
+//const glm::mat3 mat = { {1.0f,0.0f,0.0f},
+//	{0.0f,1.0f,0.0f},
+//	{0.0f,0.0f,1.0f} };
+//
+//const Triangle triangle = {
+//	{ {1.0f,0.0f}, {0.0f, 1.0f, 0.0f}},		// Vertex 1
+//	{ {1.0f, 0.5f}, {0.0f, 1.0f, 0.0f}},	// Vertex 2
+//	{ {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},	// Vertex 3
+//	{{1.0f,0.0f,0.0f,
+//	0.0f,1.0f,0.0f,
+//	0.0f,0.0f,1.0f}}
+//};
 
-const std::vector<Vertex> vertices = {
-	{ {1.0f,0.0f}, {0.0f, 1.0f, 0.0f}},
-	{ {1.0f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-	{ {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
-};
+//Triangle t = {.points = {{ {1.0f,0.0f}, {0.0f, 1.0f, 0.0f}},{ {1.0f, 0.5f}, {0.0f, 1.0f, 0.0f}},{ {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}},
+//	.line1 = {1.0f,0.0f,0.0f},
+//	.line2 = {0.0f,1.0f,0.0f},
+//	.line3 = {1.0f,0.0f,1.0f},
+//}
+const std::vector<Triangle> triangle( 1,Triangle() );
+
+//const std::vector<Vertex> vertices = {
+//	{ {1.0f,0.0f}, {0.0f, 1.0f, 0.0f}},
+//	{ {1.0f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+//	{ {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+//};
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -1043,8 +1105,8 @@ private:
 		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,fragShaderStageInfo };
 
 
-		auto bindingDescription = Vertex::getBindingDescription();
-		auto attributeDescriptions = Vertex::getAttributeDescriptions();
+		auto bindingDescriptions = Triangle::getBindingDescriptions();
+		auto attributeDescriptions = Triangle::getAttributeDescriptions();
 
 		// Prebuilt Fixed Functions Stage
 		// Vertex Input
@@ -1052,8 +1114,8 @@ private:
 		// and per-vertex and per-instance information.
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo = {}; 
 		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertexInputInfo.vertexBindingDescriptionCount = 1;
-		vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+		vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescriptions.size());
+		vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
 		vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
 		vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
@@ -1370,9 +1432,9 @@ private:
 			
 			VkBuffer vertexBuffers[] = { vertexBuffer };
 			VkDeviceSize offsets[] = { 0 };
-			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
+			vkCmdBindVertexBuffers(commandBuffers[i], 0,1, vertexBuffers, offsets);
 			
-			vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+			vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(triangle.size())*3, 1, 0, 0);
 
 			vkCmdEndRenderPass(commandBuffers[i]);
 
@@ -1630,7 +1692,7 @@ private:
 
 
 	void createVertexBuffer() {
-		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+		VkDeviceSize bufferSize = sizeof(triangle[0]) * triangle.size();
 
 		// Create a host visible buffer
 		VkBuffer stagingBuffer;
@@ -1646,7 +1708,7 @@ private:
 		// Map the memory allocated to a CPU accessible memory
 		vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
 		// Copy the vertices data
-		memcpy(data, vertices.data(), (size_t)bufferSize);
+		memcpy(data, triangle.data(), (size_t)bufferSize);
 		vkUnmapMemory(device, stagingBufferMemory);
 		
 		createBuffer(bufferSize, 
