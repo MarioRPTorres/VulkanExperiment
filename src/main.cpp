@@ -189,8 +189,9 @@ const bool enableValidationLayers = true;
 #endif
 
 void compileShaders() {
-	system("C:/VulkanSDK/1.2.135.0/Bin32/glslc ../../Github/VulkanTutorial/shader.vert -o ../../Github/VulkanTutorial/vert.spv");
-	system("C:/VulkanSDK/1.2.135.0/Bin32/glslc ../../Github/VulkanTutorial/shader.frag -o ../../Github/VulkanTutorial/frag.spv");
+	// TO DO: Add dynamic location of vulkan installation 
+	system("C:/.local/VulkanSDK-1.3.204/Bin/glslc ./resources/shader.vert -o ./vert.spv");
+	system("C:/.local/VulkanSDK-1.3.204/Bin/glslc ./resources/shader.frag -o ./frag.spv");
 }
 
 VkResult CreateDebugUtilsMessengerEXT(
@@ -763,6 +764,8 @@ private:
 
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
 		QueueFamilyIndices indices;
+		optional transferFamilyIndice;
+
 		// Logic to find queue family indices to populate struct with
 		uint32_t queueFamilyCount = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
@@ -785,14 +788,20 @@ private:
 				indices.presentFamily.set_value(i);
 
 			// Query for a queue with tranfer operation but not for graphics operations
-			if ((queueFamily.queueFlags & (VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT)) == VK_QUEUE_TRANSFER_BIT)
+			VkQueueFlags transferBit = queueFamily.queueFlags & (VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT);
+			if (transferBit == VK_QUEUE_TRANSFER_BIT)
 				indices.transferFamily.set_value(i);
+			else if (transferBit & VK_QUEUE_TRANSFER_BIT)
+				transferFamilyIndice.set_value(i);
 
 			if (indices.isComplete())
 				break;
 
 			i++;
 		}
+
+		if (!indices.transferFamily.has_value && transferFamilyIndice.has_value)
+			indices.transferFamily.set_value(transferFamilyIndice.value);
 
 		// The indeces here represent each queue family. Most likely a lot of the requirements will be met by the same
 		// queue Family but throughout the code when a feature is required, there will be an individual index to call 
@@ -1141,8 +1150,8 @@ private:
 	}
 
 	void createGraphicsPipeline() {
-		auto vertShaderCode = readFile("../../Github/VulkanTutorial/vert.spv");
-		auto fragShaderCode = readFile("../../Github/VulkanTutorial/frag.spv");
+		auto vertShaderCode = readFile("./vert.spv");
+		auto fragShaderCode = readFile("./frag.spv");
 
 		// Shader modules are only a thin wrapper around the shader bytecode. 
 		// As soon as the graphics pipeline is created the shader modules are no longer needed
@@ -1710,8 +1719,8 @@ private:
 		// the different queue families that will be using the buffer. The former option offers better performance.
 		// In this function, I differentiate between using different and single queue families by specifying 
 		// th VK_BUFFER_USAGE_TRANSFER_DST_BIT flag or not, respectively.
-		if (usage & VK_BUFFER_USAGE_TRANSFER_DST_BIT) {
-			QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+		if ((usage & VK_BUFFER_USAGE_TRANSFER_DST_BIT) && (indices.graphicsFamily.value != indices.transferFamily.value)) {
 			uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value,indices.transferFamily.value };
 			bufferInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
 			bufferInfo.queueFamilyIndexCount = 2;
