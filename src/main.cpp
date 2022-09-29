@@ -28,8 +28,9 @@
 #endif
 
 struct Vertex {
-	glm::vec3 pos;
-	glm::vec3 color;
+	alignas(16) glm::vec3 pos;
+	alignas(16) glm::vec3 color;
+	alignas(8) glm::vec2 texCoord;
 
 	static VkVertexInputBindingDescription getBindingDescription() {
 		// Binding Description tells the rate at which vertex data is coming in
@@ -41,9 +42,9 @@ struct Vertex {
 		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 		return bindingDescription;
 	}
-	static std::array<VkVertexInputAttributeDescription, 2>getAttributeDescriptions() {
+	static std::array<VkVertexInputAttributeDescription, 3>getAttributeDescriptions() {
 		// This struct tells how to extract a vertex attribute from a vertex. Since we have two attributes, position and color, we have an array of two structs.
-		std::array<VkVertexInputAttributeDescription, 2>attributeDescriptions = {};
+		std::array<VkVertexInputAttributeDescription, 3>attributeDescriptions = {};
 		attributeDescriptions[0].binding = 0;
 		attributeDescriptions[0].location = 0;
 		//• float: VK_FORMAT_R32_SFLOAT
@@ -57,6 +58,11 @@ struct Vertex {
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 		attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+		attributeDescriptions[2].binding = 0;
+		attributeDescriptions[2].location = 2;
+		attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
 		return attributeDescriptions;
 	}
 };
@@ -106,27 +112,51 @@ const int HEIGHT = 480;
 // Number of frames to be processed concurrently(simultaneously)
 const int MAX_FRAME_IN_FLIGHT = 2;
 
-//const std::vector<Vertex> vertices = {
-//	{ {-0.5f,-0.5f}, {0.0f, 1.0f, 0.0f}},
-//	{ {0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-//	{ {0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-//	{ {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+glm::vec3 cameraEye = { 0.0f,0.0f,2.0f };
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT))
+		cameraEye[1] = cameraEye[1] + 0.1f;
+	else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT))
+		cameraEye[1] = cameraEye[1] - 0.1f;
+	else if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT))
+		cameraEye[0] = cameraEye[0] + 0.1f;
+	else if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT))
+		cameraEye[0] = cameraEye[0] - 0.1f;
+	else if (key == GLFW_KEY_Z && (action == GLFW_PRESS || action == GLFW_REPEAT))
+		cameraEye[2] = cameraEye[2] + 0.1f;
+	else if (key == GLFW_KEY_X && (action == GLFW_PRESS || action == GLFW_REPEAT))
+		cameraEye[2] = cameraEye[2] - 0.1f;
+
+	printf("Camera Eye: %f , %f , %f\n", cameraEye[0], cameraEye[1], cameraEye[2]);
+}
+
+const glm::vec3 red = { 1.0f,0.0f,0.0f };
+const glm::vec3 green = { 0.0f,1.0f,0.0f };
+const glm::vec3 blue = { 0.0f,0.0f,1.0f };
+const glm::vec3 yellow = { 1.0f,1.0f,0.0f };
+const glm::vec3 white = { 1.0f,1.0f,1.0f };
+
+//std::vector<Vertex> vertices = {
+//	{ {-1.0f, -1.0f, 0.01f}, red,	{1.0f, 0.0f}}, // Upper Right Corner
+//	{ {1.0f, -1.0f, 0.01f}, blue,	{0.0f, 0.0f}},// Upper Left Corner
+//	{ {1.0f, 1.0f, 0.01f}, green,		{0.0f, 1.0f}},// Lower Left Corner
+//	{ {-1.0f, 1.0f, 0.01f}, white,		{1.0f, 1.0f}} // Lower Right Corner
 //};
-//
+
 //const std::vector<uint16_t> indices = {
 //	0,1,2,2,3,0
 //};
 
-const glm::vec3 red		=	{ 1.0f,0.0f,0.0f };
-const glm::vec3 green	=	{ 0.0f,1.0f,0.0f };
-const glm::vec3 blue	=	{ 0.0f,0.0f,1.0f };
-const glm::vec3 yellow	=	{ 1.0f,1.0f,0.0f };
-const glm::vec3 white	=	{ 1.0f,1.0f,1.0f };
+
+std::vector<uint16_t> indices = {
+	0,1,2,2,3,0
+};
 
 std::vector<Vertex> vertices = {
-	{ {0.0f, 0.0f, 0.0f}, red},
-	{ {1.0f, 0.0f, 0.0f}, red},
-	{ {0.0f, 0.0f, 1.0f}, red},
+	{ {0.0f, 0.0f, 0.0f}, red, {0.0f, 0.0f}},
+	{ {1.0f, 0.0f, 0.0f}, red,{0.0f,1.0f}},
+	{ {0.0f, 0.0f, 1.0f}, red,{1.0f,0.0f}},
 	{ {0.0f, 0.0f, 1.0f}, white},
 	{ {1.0f, 0.0f, 0.0f}, white},
 	{ {0.0f, 1.0f, 0.0f}, white},
@@ -177,7 +207,6 @@ std::vector<Vertex> vertices = {
 	{ {1.0f, 1.0f, 0.0f}, red},
 };
 
-std::vector<uint16_t> indices;
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -297,6 +326,8 @@ private:
 	std::vector<VkDescriptorSet> descriptorSets;
 	VkImage textureImage;
 	VkDeviceMemory textureImageMemory;
+	VkImageView textureImageView;
+	VkSampler textureSampler;
 
 
 	bool framebufferResized = false;
@@ -313,6 +344,9 @@ private:
 		glfwSetWindowUserPointer(window, this);
 		// Sets a callback for size change
 		glfwSetFramebufferSizeCallback(window,framebufferResizeCallback);
+
+		// Set key input callback
+		glfwSetKeyCallback(window, key_callback);
 	}
 
 	static void framebufferResizeCallback(GLFWwindow* window, int width,int height) {
@@ -336,6 +370,8 @@ private:
 		createFramebuffers();
 		createCommandPool();
 		createTextureImage();
+		createTextureImageView();
+		createTextureSampler();
 		createVertexBuffer();
 		createIndexBuffer();
 		createUniformBuffers();
@@ -343,6 +379,7 @@ private:
 		createDescriptorSets();
 		createCommandBuffers();
 		createSyncObjects();
+
 	}
 
 	void mainLoop() {
@@ -358,6 +395,8 @@ private:
 	void cleanup() {
 		cleanupSwapChain();
 
+		vkDestroySampler(device, textureSampler, nullptr);
+		vkDestroyImageView(device, textureImageView, nullptr);
 		vkDestroyImage(device, textureImage, nullptr);
 		vkFreeMemory(device, textureImageMemory, nullptr);
 		// Here there is a choice for the Allocator function
@@ -755,7 +794,11 @@ private:
 			swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
 		}
 
-		return findQueueFamilies(device).isComplete() && extensionsSupported && swapChainAdequate;
+		// Pick device mandatory device features
+		VkPhysicalDeviceFeatures supportedFeatures;
+		vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
+
+		return findQueueFamilies(device).isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 	}
 
 	bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
@@ -853,6 +896,8 @@ private:
 
 		// Info on the Device Features to use
 		VkPhysicalDeviceFeatures deviceFeatures = {};
+		// Enable anisotrophy filtering for samplers. Almost all devices support this feature
+		deviceFeatures.samplerAnisotropy = VK_TRUE;
 
 		// Logical Device Create Info struct
 		VkDeviceCreateInfo createInfo = {};
@@ -1041,30 +1086,36 @@ private:
 		}
 	}
 
+	VkImageView createImageView(VkImage image, VkFormat format) {
+		VkImageViewCreateInfo createInfo = {  };
+		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		createInfo.image = image;
+		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		createInfo.format = format;
+		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		createInfo.subresourceRange.baseMipLevel = 0;
+		createInfo.subresourceRange.levelCount = 1;
+		createInfo.subresourceRange.baseArrayLayer = 0;
+		createInfo.subresourceRange.layerCount = 1;
+
+		VkImageView imageView;
+		// Here there is a choice for the Allocator function
+		if (vkCreateImageView(device, &createInfo, nullptr, &imageView) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create image views!");
+		}
+		return imageView;
+	}
+
 	void createImageViews() {
 		swapChainImageViews.resize(swapChainImages.size());
 
 		for (size_t i = 0; i < swapChainImages.size(); i++) {
-			VkImageViewCreateInfo createInfo = {  };
-			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			createInfo.image = swapChainImages[i];
-			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			createInfo.format = swapChainImageFormat;
-			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			createInfo.subresourceRange.baseMipLevel = 0;
-			createInfo.subresourceRange.levelCount = 1;
-			createInfo.subresourceRange.baseArrayLayer = 0;
-			createInfo.subresourceRange.layerCount = 1;
-
-			// Here there is a choice for the Allocator function
-			if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create image views!");
-			}
+			swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat);
 		}
 	}
 
@@ -1908,13 +1959,13 @@ private:
 		
 		UniformBufferObject ubo = {};
 		//ubo.model = glm::translate(glm::rotate(glm::mat4(1.0f), time*glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),glm::vec3(1.0f,1.0f,0.0f));
-		//ubo.model = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, 0.0f));
-		ubo.model = glm::rotate(glm::mat4(1.0f), time*glm::radians(90.0f), glm::vec3(0.0f, 0.0f,1.0f));
-		//ubo.model = glm::mat4(1.0f);
+		//ubo.model = glm::translate(glm::mat4(0.0f), glm::vec3(1.0f, 1.0f, 0.0f));
+		//ubo.model = glm::rotate(glm::mat4(1.0f), time*glm::radians(90.0f), glm::vec3(0.0f, 0.0f,1.0f));
+		ubo.model = glm::mat4(1.0f);
 		//ubo.model[3][0] = 1.0f;
 		//ubo.model[3][1] = 1.0f;
 		//ubo.model[3][2] = 0.0f;
-		ubo.view = glm::lookAt(glm::vec3(-2.0f,-2.0f,2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f,1.0f));
+		ubo.view = glm::lookAt(cameraEye, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f,0.0f));
 		ubo.proj = glm::perspective(glm::radians(60.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
 		ubo.proj[1][1] *= -1;
 		
@@ -1938,10 +1989,18 @@ private:
 		// For image sampling related descriptors
 		uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
 
+		VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
+		samplerLayoutBinding.binding = 1;
+		samplerLayoutBinding.descriptorCount = 1;
+		samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		samplerLayoutBinding.pImmutableSamplers = nullptr;
+		samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
 		VkDescriptorSetLayoutCreateInfo layoutInfo = {};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 1;
-		layoutInfo.pBindings = &uboLayoutBinding;
+		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+		layoutInfo.pBindings = bindings.data();
 
 		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor set layout!");
@@ -1949,14 +2008,19 @@ private:
 	}
 
 	void createDescriptorPool() {
-		VkDescriptorPoolSize poolSize = {};
-		poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		poolSize.descriptorCount = static_cast<uint32_t>(swapChainImages.size());
+		std::array<VkDescriptorPoolSize, 2> poolSizes = {};
+		// Pool for uniform buffer
+		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
+
+		// Pool for combined image sampler
+		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
 		VkDescriptorPoolCreateInfo poolInfo = {};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.poolSizeCount = 1;
-		poolInfo.pPoolSizes = &poolSize;
+		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		poolInfo.pPoolSizes = poolSizes.data();
 		poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size());
 		//The structure has an optional flag similar to command pools that determines if
 		//	individual descriptor sets can be freed or not: VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT.
@@ -1988,18 +2052,32 @@ private:
 			bufferInfo.offset = 0;
 			bufferInfo.range = sizeof(UniformBufferObject);
 		
-			VkWriteDescriptorSet descriptorWrite = {};
-			descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrite.dstSet = descriptorSets[i];
-			descriptorWrite.dstBinding = 0;
-			descriptorWrite.dstArrayElement = 0;
-			descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			descriptorWrite.descriptorCount = 1;
-			descriptorWrite.pBufferInfo = &bufferInfo;
-			descriptorWrite.pImageInfo = nullptr; // Optional
-			descriptorWrite.pTexelBufferView = nullptr; // Optional
+			VkDescriptorImageInfo imageInfo = {};
+			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageInfo.imageView = textureImageView;
+			imageInfo.sampler = textureSampler;
 
-			vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+			std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+
+			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[0].dstSet = descriptorSets[i];
+			descriptorWrites[0].dstBinding = 0;
+			descriptorWrites[0].dstArrayElement = 0;
+			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrites[0].descriptorCount = 1;
+			descriptorWrites[0].pBufferInfo = &bufferInfo;
+			descriptorWrites[0].pImageInfo = nullptr; // Optional
+			descriptorWrites[0].pTexelBufferView = nullptr; // Optional
+
+			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[1].dstSet = descriptorSets[i];
+			descriptorWrites[1].dstBinding = 1;
+			descriptorWrites[1].dstArrayElement = 0;
+			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[1].descriptorCount = 1;
+			descriptorWrites[1].pImageInfo = &imageInfo;
+
+			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 		}
 	}
 
@@ -2070,8 +2148,8 @@ private:
 		cv::cvtColor(matImage, matImage, cv::COLOR_BGR2RGBA,4);
 		VkDeviceSize imageSize = matImage.total() * matImage.elemSize();
 
-		texWidth = matImage.rows;
-		texHeight = matImage.cols;
+		texWidth = matImage.cols;
+		texHeight = matImage.rows;
 		texChannels = 4;
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
@@ -2183,6 +2261,59 @@ private:
 
 		endSingleTimeCommands(commandBuffer);
 	}
+
+	void createTextureImageView() {
+		textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB);
+	}
+
+	void createTextureSampler() {
+		// Sampler is a separate object that can be used on any image and doesn't reference the image anywhere
+		VkSamplerCreateInfo samplerInfo = {};
+		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		/*
+		* VK_FILTER_LINEAR
+		* VK_FILTER_NEAREST
+		*/
+		// Filter for oversampling 
+		samplerInfo.magFilter = VK_FILTER_LINEAR;
+		// Filter for undersampling
+		samplerInfo.minFilter = VK_FILTER_LINEAR;
+		/*
+		Address mode: What happens when reading texels outside the picture
+		• VK_SAMPLER_ADDRESS_MODE_REPEAT: Repeat the texture when going beyond the image dimensions.
+		• VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT: Like repeat, but inverts
+			the coordinates to mirror the image when going beyond the dimensions.
+		• VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE: Take the color of the edge
+			closest to the coordinate beyond the image dimensions.
+		• VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE: Like clamp to edge,
+			but instead uses the edge opposite to the closest edge.
+		• VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER: Return a solid color
+			when sampling beyond the dimensions of the image.
+		*/
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		// Unless for performance reasons always enable anisotropic filter
+		samplerInfo.anisotropyEnable = VK_TRUE;
+		samplerInfo.maxAnisotropy = 16;
+		// Color when address mode is clamp to border.
+		// Can be Black, white or transparent
+		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+		// Whether to normalize the coordinates to [0,1]
+		samplerInfo.unnormalizedCoordinates = VK_FALSE;
+		// used for percentage-closer filtering on shadow maps
+		samplerInfo.compareEnable = VK_FALSE;
+		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+		// Filtering for mipmapping
+		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		samplerInfo.mipLodBias = 0.0f;
+		samplerInfo.minLod = 0.0f;
+		samplerInfo.maxLod = 0.0f;
+
+		if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture sampler!");
+		}
+	}
 };
 
 const double pi = 3.14159265358979323846264338327950288;
@@ -2193,7 +2324,7 @@ const float aaa[16] = { 1.0f, cosf(pi / 3.0f), 0.5f,						-1.0f,
 			0.0f,0.0f,0.0f,													1.0f };
 
 const glm::mat4 spT = glm::transpose(glm::make_mat4(aaa));
-//const glm::mat4 spT = glm::make_mat4(aaa);
+//const glm::mat4 spT = glm::identity<glm::mat4>();
 
 int main() {
 	indices.resize(vertices.size());
