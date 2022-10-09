@@ -228,6 +228,17 @@ void compileShaders() {
 	system("C:/.local/VulkanSDK-1.3.204/Bin/glslc ./resources/shader.frag -o ./frag.spv");
 }
 
+cv::Mat loadImage(std::string imagePath) {
+	cv::Mat image = cv::imread(imagePath, cv::IMREAD_COLOR); // do grayscale processing?
+
+	if (image.data == NULL) {
+		throw std::runtime_error("failed to load texture image!");
+	}
+	cv::cvtColor(image, image, cv::COLOR_BGR2RGBA, 4);
+
+	return image;
+}
+
 VkResult CreateDebugUtilsMessengerEXT(
 	VkInstance instance,
 	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
@@ -329,6 +340,8 @@ private:
 	VkImageView textureImageView;
 	VkSampler textureSampler;
 
+	std::array<VkImage, 2> textureImages;
+	int loadedTexture = 0;
 
 	bool framebufferResized = false;
 
@@ -2139,13 +2152,8 @@ private:
 
 	void createTextureImage() {
 		int texWidth, texHeight, texChannels;
-		cv::Mat matImage = cv::imread("C:\\.dev\\VulkanExperiment\\resources\\texture.png", cv::IMREAD_COLOR); // do grayscale processing?
-		//stbi_uc * pixels = stbi_load("textures/texture.jpg", &texWidth,&texHeight, &texChannels, STBI_rgb_alpha);
-		
-		if (matImage.data == NULL) {
-			throw std::runtime_error("failed to load texture image!");
-		}
-		cv::cvtColor(matImage, matImage, cv::COLOR_BGR2RGBA,4);
+
+		cv::Mat matImage = loadImage(".\\resources\\texture_2.png");
 		VkDeviceSize imageSize = matImage.total() * matImage.elemSize();
 
 		texWidth = matImage.cols;
@@ -2172,19 +2180,21 @@ private:
 			VK_FORMAT_R8G8B8A8_SRGB, 
 			VK_IMAGE_TILING_OPTIMAL, 
 			VK_IMAGE_USAGE_TRANSFER_DST_BIT |	VK_IMAGE_USAGE_SAMPLED_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			textureImage,
 			textureImageMemory);
 
-		transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 		copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+
 		transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vkFreeMemory(device, stagingBufferMemory, nullptr);
 	}
+	
 	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
 
 		QueueFamilyIndices ind = findQueueFamilies(physicalDevice);
@@ -2212,15 +2222,18 @@ private:
 		VkPipelineStageFlags sourceStage;
 		VkPipelineStageFlags destinationStage;
 		
-		if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout ==
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+		if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && 
+			newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) 
+		{
 			barrier.srcAccessMask = 0;
 			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			
 			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 			destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		} 
-		else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+		else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && 
+				 newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) 
+		{
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			
@@ -2242,6 +2255,7 @@ private:
 		);
 		endSingleTimeCommands(commandBuffer);
 	}
+
 	void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
 		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 		VkBufferImageCopy region = {};
@@ -2313,6 +2327,48 @@ private:
 		if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create texture sampler!");
 		}
+	}
+
+	void updateTextureImage(std::string imagePath) {
+		int texWidth, texHeight, texChannels;
+
+		cv::Mat matImage = loadImage(imagePath);
+		VkDeviceSize imageSize = matImage.total() * matImage.elemSize();
+
+		texWidth = matImage.cols;
+		texHeight = matImage.rows;
+		texChannels = 4;
+		VkBuffer stagingBuffer;
+		VkDeviceMemory stagingBufferMemory;
+
+		createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer,
+			stagingBufferMemory);
+
+		void* data;
+		vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+		memcpy(data, matImage.data, static_cast<size_t>(imageSize));
+		vkUnmapMemory(device, stagingBufferMemory);
+
+		matImage.release();
+
+		createImage(
+			texWidth,
+			texHeight,
+			VK_FORMAT_R8G8B8A8_SRGB,
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			textureImage,
+			textureImageMemory);
+		transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+
+		transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		vkDestroyBuffer(device, stagingBuffer, nullptr);
+		vkFreeMemory(device, stagingBufferMemory, nullptr);
 	}
 };
 
