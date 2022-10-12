@@ -9,11 +9,12 @@ project(${PROJECT_TARGET} VERSION 1.0.0 LANGUAGES C CXX)
 set( CMAKE_MESSAGE_LOG_LEVEL "STATUS" )
 
 # This project specific include files
-include_directories(./include )
+include_directories(./src )
 
 # Create the project target
 add_executable(${PROJECT_TARGET} 
 	src/main.cpp
+    src/main_extra.hpp
 )
 
 # Add libs
