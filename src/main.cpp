@@ -6,7 +6,10 @@ const int HEIGHT = 480;
 // Number of frames to be processed concurrently(simultaneously)
 const int MAX_FRAME_IN_FLIGHT = 2;
 
-std::vector<uint16_t> indices = {};
+const std::string MODEL_PATH = "models/cottage_obj.obj";
+const std::string TEXTURE_PATH = "textures/cottage_diffuse.png";
+
+std::vector<uint32_t> indices = {};
 std::vector<Vertex> vertices = {};
 
 const std::vector<const char*> validationLayers = {
@@ -38,6 +41,10 @@ cv::Mat loadImage(std::string imagePath) {
 	cv::cvtColor(image, image, cv::COLOR_BGR2RGBA, 4);
 
 	return image;
+}
+
+void loadModel() {
+
 }
 
 VkResult CreateDebugUtilsMessengerEXT(
@@ -1440,7 +1447,7 @@ private:
 			VkDeviceSize offsets[] = { 0 };
 			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
 			// We can only have a single index buffer.
-			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 			// Descriptor Set bindings.ffs
 			vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
@@ -1997,7 +2004,7 @@ private:
 	void createTextureImage() {
 		int texWidth, texHeight, texChannels;
 
-		cv::Mat matImage = loadImage(".\\resources\\texture_2.png");
+		cv::Mat matImage = loadImage(TEXTURE_PATH);
 		VkDeviceSize imageSize = matImage.total() * matImage.elemSize();
 
 		texWidth = matImage.cols;

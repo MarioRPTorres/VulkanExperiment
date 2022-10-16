@@ -14,6 +14,10 @@
 #include <algorithm> // For std::max/min
 #include <opencv2/opencv.hpp>
 
+// To include the functions bodies and avoid linker errors
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
+
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm\glm.hpp>
@@ -111,5 +115,8 @@ struct SwapChainSupportDetails {
 	std::vector<VkSurfaceFormatKHR> formats;
 	std::vector<VkPresentModeKHR> presentModes;
 };
+
+
+void loadModel();
 
 #endif

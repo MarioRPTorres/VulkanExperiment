@@ -65,7 +65,6 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 	}
 	else if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT)){
 		
-		printf("Pressed Right ");
 		if ((t1 + dAngle) > pi) {
 			t1 = -pi;
 		}
@@ -80,7 +79,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
 	}
 	else if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-		printf("Pressed Left ");
+		
 		if ((t1 - dAngle) < -pi) {
 			t1 = pi;
 		}
@@ -109,11 +108,11 @@ const glm::vec3 white = { 1.0f,1.0f,1.0f };
 
 struct botchedModel {
 	std::vector<Vertex> v;
-	std::vector<uint16_t> i;
-	void (*preSPT) (std::vector<Vertex>&, std::vector<uint16_t>&);
+	std::vector<uint32_t> i;
+	void (*preSPT) (std::vector<Vertex>&, std::vector<uint32_t>&);
 };
 
-void arrangePyramidVertex(std::vector<Vertex>& vert, std::vector<uint16_t>& ind) {
+void arrangePyramidVertex(std::vector<Vertex>& vert, std::vector<uint32_t>& ind) {
 	const float preMat[16] = {
 			1.0f, cosf(pi / 3.0f),  0.5f,													-1.0f,
 			0.0f, sinf(pi / 3.0f),  tanf(pi / 6.0f) * 0.5f,									-0.577350269189626f,
@@ -207,8 +206,18 @@ botchedModel tutorial = {
 };
 
 
+void loadObjFile(std::vector<Vertex>& vert, std::vector<uint32_t>& ind) {
 
-void generateVertices(std::vector<Vertex>& vert, std::vector<uint16_t>& ind) {
+}
+
+botchedModel model = {
+	{},
+	{},
+	&loadObjFile
+};
+
+
+void generateVertices(std::vector<Vertex>& vert, std::vector<uint32_t>& ind) {
 	botchedModel& m = tutorial;
 
 	vert = m.v;
