@@ -44,7 +44,41 @@ cv::Mat loadImage(std::string imagePath) {
 }
 
 void loadModel() {
+	tinyobj::attrib_t attrib;
+	std::vector<tinyobj::shape_t> shapes;
+	std::vector<tinyobj::material_t> materials;
+	std::string warn, err;
+	/*
+	Faces in OBJ files can actually contain an arbitrary number of vertices, whereas our
+	application can only render triangles. Luckily the LoadObj has an optional
+	parameter to automatically triangulate such faces, which is enabled by default.
+	*/
+	if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
+		throw std::runtime_error(warn + err);
+	}
 
+	for (const auto& shape : shapes) {
+		for (const auto& index : shape.mesh.indices) {
+			Vertex vertex = {};
+
+			vertex.pos = {
+				attrib.vertices[3 * index.vertex_index + 0],
+				attrib.vertices[3 * index.vertex_index + 1],
+				attrib.vertices[3 * index.vertex_index + 2]
+			};
+			
+			vertex.texCoord = {
+				attrib.texcoords[2 * index.texcoord_index + 0],
+				1.0f - attrib.texcoords[2 * index.texcoord_index + 1] 
+			};
+			
+			vertex.color = { 1.0f, 1.0f, 1.0f };
+			
+			vertices.push_back(vertex);
+			indices.push_back(indices.size());
+		
+		}
+	}
 }
 
 VkResult CreateDebugUtilsMessengerEXT(
@@ -1830,7 +1864,7 @@ private:
 		//ubo.model[3][1] = 1.0f;
 		//ubo.model[3][2] = 0.0f;
 		ubo.view = glm::lookAt(cameraEye, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f,0.0f));
-		ubo.proj = glm::perspective(glm::radians(60.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+		ubo.proj = glm::perspective(glm::radians(60.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 60.0f);
 		ubo.proj[1][1] *= -1;
 		
 		void* data;
@@ -2302,8 +2336,8 @@ private:
 
 int main() {
 
-	generateVertices(vertices,indices);
-
+	// generateVertices(vertices,indices);
+	loadModel();
 	compileShaders();
 	HelloTriangleApplication app;
 
