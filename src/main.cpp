@@ -43,6 +43,17 @@ cv::Mat loadImage(std::string imagePath) {
 	return image;
 }
 
+namespace std {
+	template<> struct hash<Vertex> {
+		size_t operator()(Vertex const& vertex) const {
+		return ((hash<glm::vec3>()(vertex.pos) ^
+				(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+				(hash<glm::vec2>()(vertex.texCoord) << 1);
+			
+		}
+	};
+}
+
 void loadModel() {
 	tinyobj::attrib_t attrib;
 	std::vector<tinyobj::shape_t> shapes;
@@ -56,6 +67,8 @@ void loadModel() {
 	if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
 		throw std::runtime_error(warn + err);
 	}
+
+	std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
 
 	for (const auto& shape : shapes) {
 		for (const auto& index : shape.mesh.indices) {
@@ -73,10 +86,13 @@ void loadModel() {
 			};
 			
 			vertex.color = { 1.0f, 1.0f, 1.0f };
+
+			if (uniqueVertices.count(vertex) == 0) {
+				uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+				vertices.push_back(vertex);
+			}
 			
-			vertices.push_back(vertex);
-			indices.push_back(indices.size());
-		
+			indices.push_back(uniqueVertices[vertex]);
 		}
 	}
 }
