@@ -6,7 +6,10 @@ const int HEIGHT = 480;
 // Number of frames to be processed concurrently(simultaneously)
 const int MAX_FRAME_IN_FLIGHT = 2;
 
-std::vector<uint16_t> indices = {};
+const std::string MODEL_PATH = "models/cottage_obj.obj";
+const std::string TEXTURE_PATH = "textures/cottage_diffuse.png";
+
+std::vector<uint32_t> indices = {};
 std::vector<Vertex> vertices = {};
 
 const std::vector<const char*> validationLayers = {
@@ -38,6 +41,60 @@ cv::Mat loadImage(std::string imagePath) {
 	cv::cvtColor(image, image, cv::COLOR_BGR2RGBA, 4);
 
 	return image;
+}
+
+namespace std {
+	template<> struct hash<Vertex> {
+		size_t operator()(Vertex const& vertex) const {
+		return ((hash<glm::vec3>()(vertex.pos) ^
+				(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+				(hash<glm::vec2>()(vertex.texCoord) << 1);
+			
+		}
+	};
+}
+
+void loadModel() {
+	tinyobj::attrib_t attrib;
+	std::vector<tinyobj::shape_t> shapes;
+	std::vector<tinyobj::material_t> materials;
+	std::string warn, err;
+	/*
+	Faces in OBJ files can actually contain an arbitrary number of vertices, whereas our
+	application can only render triangles. Luckily the LoadObj has an optional
+	parameter to automatically triangulate such faces, which is enabled by default.
+	*/
+	if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
+		throw std::runtime_error(warn + err);
+	}
+
+	std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
+
+	for (const auto& shape : shapes) {
+		for (const auto& index : shape.mesh.indices) {
+			Vertex vertex = {};
+
+			vertex.pos = {
+				attrib.vertices[3 * index.vertex_index + 0],
+				attrib.vertices[3 * index.vertex_index + 1],
+				attrib.vertices[3 * index.vertex_index + 2]
+			};
+			
+			vertex.texCoord = {
+				attrib.texcoords[2 * index.texcoord_index + 0],
+				1.0f - attrib.texcoords[2 * index.texcoord_index + 1] 
+			};
+			
+			vertex.color = { 1.0f, 1.0f, 1.0f };
+
+			if (uniqueVertices.count(vertex) == 0) {
+				uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+				vertices.push_back(vertex);
+			}
+			
+			indices.push_back(uniqueVertices[vertex]);
+		}
+	}
 }
 
 VkResult CreateDebugUtilsMessengerEXT(
@@ -1440,7 +1497,7 @@ private:
 			VkDeviceSize offsets[] = { 0 };
 			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
 			// We can only have a single index buffer.
-			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 			// Descriptor Set bindings.ffs
 			vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
@@ -1823,7 +1880,7 @@ private:
 		//ubo.model[3][1] = 1.0f;
 		//ubo.model[3][2] = 0.0f;
 		ubo.view = glm::lookAt(cameraEye, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f,0.0f));
-		ubo.proj = glm::perspective(glm::radians(60.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+		ubo.proj = glm::perspective(glm::radians(60.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 60.0f);
 		ubo.proj[1][1] *= -1;
 		
 		void* data;
@@ -1997,7 +2054,7 @@ private:
 	void createTextureImage() {
 		int texWidth, texHeight, texChannels;
 
-		cv::Mat matImage = loadImage(".\\resources\\texture_2.png");
+		cv::Mat matImage = loadImage(TEXTURE_PATH);
 		VkDeviceSize imageSize = matImage.total() * matImage.elemSize();
 
 		texWidth = matImage.cols;
@@ -2295,8 +2352,8 @@ private:
 
 int main() {
 
-	generateVertices(vertices,indices);
-
+	// generateVertices(vertices,indices);
+	loadModel();
 	compileShaders();
 	HelloTriangleApplication app;
 

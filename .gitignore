@@ -9,6 +9,8 @@
 # Build Directory
 build/
 out/
+textures/
+models/
 
 # Exclude Libraries
 libs/*

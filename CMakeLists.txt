@@ -74,21 +74,30 @@ MESSAGE(STATUS "Opencv libraries: ${OpenCV_LIBS}")
 
 MESSAGE(STATUS "Opencv Include Directories: ${OpenCV_INCLUDE_DIRS}")
 
+
+#=================== tiny_object_loader 2.0.0 release candidate ===================
+
+include_directories("./libs/tinyobjloader-2.0.0-rc")
+
 #==============================================
 
 #Define the C++ Standard
 set_property(TARGET ${PROJECT_TARGET} PROPERTY CXX_STANDARD 11)
 
-# Get all dll files added from subdirectory "libs"
-FILE(GLOB resourcesFiles "${CMAKE_CURRENT_SOURCE_DIR}/resources/*")
-message(STATUS "Resource files to copy: ${resourcesFiles}")
+
 
 # Move the resource folder together with the executable after build
 ADD_CUSTOM_COMMAND(TARGET ${PROJECT_TARGET}
           POST_BUILD
           #COMMAND cmake_path  command_Mode command 
           COMMAND ${CMAKE_COMMAND} -E make_directory   $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources 
+          COMMAND ${CMAKE_COMMAND} -E make_directory   $<TARGET_FILE_DIR:${PROJECT_NAME}>/textures 
+          COMMAND ${CMAKE_COMMAND} -E make_directory   $<TARGET_FILE_DIR:${PROJECT_NAME}>/models 
 )
+
+# Get all resource files added from subdirectory resources
+FILE(GLOB resourcesFiles "${CMAKE_CURRENT_SOURCE_DIR}/resources/*")
+message(STATUS "Resource files to copy: ${resourcesFiles}")
 
 foreach(rFile ${resourcesFiles})
 ADD_CUSTOM_COMMAND(TARGET ${PROJECT_TARGET}
@@ -103,5 +112,29 @@ ADD_CUSTOM_COMMAND(TARGET ${PROJECT_TARGET}
           POST_BUILD
           #COMMAND cmake_path  command_Mode command 
           COMMAND ${CMAKE_COMMAND} -E copy "${OPENCV_DLL_DIR}/${dllFile}${OPENCVDLL_POSTFIX}.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>
+)
+endforeach()
+
+# Get all texture files added from subdirectory resources
+FILE(GLOB textureFiles "${CMAKE_CURRENT_SOURCE_DIR}/textures/*")
+message(STATUS "Texture files to copy: ${textureFiles}")
+
+foreach(tFile ${textureFiles})
+ADD_CUSTOM_COMMAND(TARGET ${PROJECT_TARGET}
+          POST_BUILD
+          #COMMAND cmake_path  command_Mode command 
+          COMMAND ${CMAKE_COMMAND} -E copy ${tFile} $<TARGET_FILE_DIR:${PROJECT_NAME}>/textures
+)
+endforeach()
+
+# Get all model files added from subdirectory resources
+FILE(GLOB modelFiles "${CMAKE_CURRENT_SOURCE_DIR}/models/*")
+message(STATUS "Model files to copy: ${modelFiles}")
+
+foreach(mFile ${modelFiles})
+ADD_CUSTOM_COMMAND(TARGET ${PROJECT_TARGET}
+          POST_BUILD
+          #COMMAND cmake_path  command_Mode command 
+          COMMAND ${CMAKE_COMMAND} -E copy ${mFile} $<TARGET_FILE_DIR:${PROJECT_NAME}>/models
 )
 endforeach()
