@@ -201,6 +201,11 @@ private:
 	VkImage depthImage;
 	VkDeviceMemory depthImageMemory;
 	VkImageView depthImageView;
+	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+	// Multisampling needs an offscreen buffer that is then rendered to the scrren
+	VkImage colorImage;
+	VkDeviceMemory colorImageMemory;
+	VkImageView colorImageView;
 
 	std::array<VkImage, 2> textureImages;
 	int loadedTexture = 0;
@@ -243,6 +248,7 @@ private:
 		createDescriptorSetLayout();
 		createGraphicsPipeline();
 		createCommandPool();
+		createColorResources();
 		createDepthResources();
 		createFramebuffers();
 		createTextureImage();
@@ -255,7 +261,6 @@ private:
 		createDescriptorSets();
 		createCommandBuffers();
 		createSyncObjects();
-
 	}
 
 	void mainLoop() {
@@ -307,6 +312,9 @@ private:
 	}
 
 	void cleanupSwapChain() {
+		vkDestroyImageView(device, colorImageView, nullptr);
+		vkDestroyImage(device, colorImage, nullptr);
+		vkFreeMemory(device, colorImageMemory, nullptr);
 		vkDestroyImageView(device, depthImageView, nullptr);
 		vkDestroyImage(device, depthImage, nullptr);
 		vkFreeMemory(device, depthImageMemory, nullptr);
@@ -355,6 +363,7 @@ private:
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createRenderPass();
 		createGraphicsPipeline();
+		createColorResources();
 		createDepthResources();
 		createFramebuffers();
 		createUniformBuffers();
@@ -618,6 +627,8 @@ private:
 		if (physicalDevice == VK_NULL_HANDLE) {
 			throw std::runtime_error("failed to find a suitable GPU!");
 		}
+		// Add the multisample anti-aliasing count
+		msaaSamples = getMaxUsableSampleCount();
 	}
 
 #ifdef PHYSICAL_DEVICE_SCORE_SELECTION
@@ -1996,7 +2007,8 @@ private:
 		}
 	}
 
-	void createImage(uint32_t width, uint32_t height, uint32_t mipLevels,
+	void createImage(uint32_t width, uint32_t height, 
+		uint32_t mipLevels, VkSampleCountFlagBits numSamples,
 		VkFormat format,
 		VkImageTiling tiling, VkImageUsageFlags usage,
 		VkMemoryPropertyFlags properties, VkImage& image,
@@ -2032,7 +2044,7 @@ private:
 		// Image will only be used by one queue family: the graphics queue
 		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageInfo.samples = numSamples;
 		imageInfo.flags = 0; // Optional
 
 		if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
@@ -2083,6 +2095,7 @@ private:
 			texWidth,
 			texHeight, 
 			mipLevels,
+			VK_SAMPLE_COUNT_1_BIT,
 			VK_FORMAT_R8G8B8A8_SRGB, 
 			VK_IMAGE_TILING_OPTIMAL, 
 			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |	VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -2248,7 +2261,7 @@ private:
 		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 		samplerInfo.mipLodBias = 0;
 		samplerInfo.minLod = 0; // minimum level of detail to choose mip levels
-		samplerInfo.maxLod = static_cast<float>(mipLevels); 
+		samplerInfo.maxLod = static_cast<float>(mipLevels); // maximum level of detail to choose mip levels
 
 		if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create texture sampler!");
@@ -2283,6 +2296,7 @@ private:
 			texWidth,
 			texHeight,
 			1,
+			VK_SAMPLE_COUNT_1_BIT,
 			VK_FORMAT_R8G8B8A8_SRGB,
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -2343,7 +2357,8 @@ private:
 
 		VkFormat depthFormat = findDepthFormat();
 
-		createImage(swapChainExtent.width, swapChainExtent.height,1,
+		createImage(swapChainExtent.width, swapChainExtent.height,
+					1, msaaSamples,
 					depthFormat, VK_IMAGE_TILING_OPTIMAL,
 					VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage,
@@ -2460,6 +2475,34 @@ private:
 
 		endSingleTimeCommands(commandBuffer);
 		
+	}
+	VkSampleCountFlagBits getMaxUsableSampleCount() {
+		VkPhysicalDeviceProperties physicalDeviceProperties;
+		vkGetPhysicalDeviceProperties(physicalDevice,&physicalDeviceProperties);
+		
+		VkSampleCountFlags counts =	physicalDeviceProperties.limits.framebufferColorSampleCounts &
+			physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+		if (counts & VK_SAMPLE_COUNT_64_BIT) return VK_SAMPLE_COUNT_64_BIT;
+		if (counts & VK_SAMPLE_COUNT_32_BIT) return VK_SAMPLE_COUNT_32_BIT;
+		if (counts & VK_SAMPLE_COUNT_16_BIT) return VK_SAMPLE_COUNT_16_BIT;
+		if (counts & VK_SAMPLE_COUNT_8_BIT) return VK_SAMPLE_COUNT_8_BIT; 
+		if (counts & VK_SAMPLE_COUNT_4_BIT) return VK_SAMPLE_COUNT_4_BIT;
+		if (counts & VK_SAMPLE_COUNT_2_BIT) return VK_SAMPLE_COUNT_2_BIT;
+		return VK_SAMPLE_COUNT_1_BIT;
+	}
+
+	void createColorResources() {
+		VkFormat colorFormat = swapChainImageFormat;
+	
+		createImage(swapChainExtent.width, swapChainExtent.height, 
+				1,msaaSamples, 
+				colorFormat, 
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+				colorImage, colorImageMemory);
+
+		colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
 };
 
