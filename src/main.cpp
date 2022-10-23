@@ -1,13 +1,25 @@
 #include "main.h"
 #include "main_extra.hpp"
 
+/*
+Future Feature:
+• Push constants
+• Instanced rendering
+• Dynamic uniforms
+• Separate images and sampler descriptors
+• Pipeline cache
+• Multi-threaded command buffer generation
+• Multiple subpasses
+• Compute shaders
+*/
+
 const int WIDTH = 640;
 const int HEIGHT = 480;
 // Number of frames to be processed concurrently(simultaneously)
 const int MAX_FRAME_IN_FLIGHT = 2;
 
 const std::string MODEL_PATH = "models/cottage_obj.obj";
-const std::string TEXTURE_PATH = "textures/cottage_diffuse.png";
+const std::string TEXTURE_PATH = "textures/texture_1.png";
 
 std::vector<uint32_t> indices = {};
 std::vector<Vertex> vertices = {};
@@ -67,7 +79,7 @@ void loadModel() {
 	if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
 		throw std::runtime_error(warn + err);
 	}
-
+	if (!warn.empty()) printf(warn.c_str());
 	std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
 
 	for (const auto& shape : shapes) {
@@ -80,9 +92,10 @@ void loadModel() {
 				attrib.vertices[3 * index.vertex_index + 2]
 			};
 			
-			vertex.texCoord = {
+			if (index.texcoord_index < 0) vertex.texCoord = { 0.0f, 0.0f };
+			else vertex.texCoord = {
 				attrib.texcoords[2 * index.texcoord_index + 0],
-				1.0f - attrib.texcoords[2 * index.texcoord_index + 1] 
+				1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
 			};
 			
 			vertex.color = { 1.0f, 1.0f, 1.0f };
@@ -90,6 +103,7 @@ void loadModel() {
 			if (uniqueVertices.count(vertex) == 0) {
 				uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
 				vertices.push_back(vertex);
+				printf("%d", index.texcoord_index);
 			}
 			
 			indices.push_back(uniqueVertices[vertex]);
@@ -1012,24 +1026,10 @@ private:
 	}
 
 	void createRenderPass() {
-		// Attachment creation
-		VkAttachmentDescription depthAttachment = {};
-		depthAttachment.format = findDepthFormat();
-		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-		VkAttachmentReference depthAttachmentRef = {};
-		depthAttachmentRef.attachment = 1;
-		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
+		// Color Attachment creation
 		VkAttachmentDescription colorAttachment = {};
 		colorAttachment.format = swapChainImageFormat;
-		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachment.samples = msaaSamples;
 		//• VK_ATTACHMENT_LOAD_OP_DONT_CARE : Existing contents are undefined;
 		//• VK_ATTACHMENT_LOAD_OP_LOAD : Preserve the existing contents of the attachment
 		//• VK_ATTACHMENT_LOAD_OP_CLEAR : Clear the values to a constant at the	start
@@ -1046,12 +1046,47 @@ private:
 		//• VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : Images to be presented in the swap chain
 		//• VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : Images to be used as destination for a memory copy operation
 		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // Without msaa would be VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 		// Reference to point to the attachment in the attachment array
 		VkAttachmentReference colorAttachmentRef = {};
 		colorAttachmentRef.attachment = 0;
-		colorAttachmentRef.layout =  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+
+		// Depth Attachment creation
+		VkAttachmentDescription depthAttachment = {};
+		depthAttachment.format = findDepthFormat();
+		depthAttachment.samples = msaaSamples;
+		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference depthAttachmentRef = {};
+		depthAttachmentRef.attachment = 1;
+		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+
+		// Color Resolve Attachment creation
+		VkAttachmentDescription colorAttachmentResolve = {};
+		colorAttachmentResolve.format = swapChainImageFormat;
+		colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+		// Reference to point to the attachment in the attachment array
+		VkAttachmentReference colorAttachmentResolveRef = {};
+		colorAttachmentResolveRef.attachment = 2;
+		colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+
 
 		// Create first subpass with one attachment
 		VkSubpassDescription subpass = {};
@@ -1059,6 +1094,7 @@ private:
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentRef;
 		subpass.pDepthStencilAttachment = &depthAttachmentRef;
+		subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
 		//The following other types of attachments can be referenced by a subpass :
 		//• pInputAttachments : Attachments that are read from a shader
@@ -1066,7 +1102,7 @@ private:
 		//• pDepthStencilAttachment : Attachment for depth and stencil data
 		//• pPreserveAttachments : Attachments that are not used by this subpass,	but for which the data must be preserved
 		
-		std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+		std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
 		// Create the Render pass with arguments of the subpasses used and the attachments to refer to.
 		VkRenderPassCreateInfo renderPassInfo = {};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -1245,7 +1281,7 @@ private:
 		VkPipelineMultisampleStateCreateInfo multisampling = {};
 		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 		multisampling.sampleShadingEnable = VK_FALSE;
-		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+		multisampling.rasterizationSamples = msaaSamples;
 		multisampling.minSampleShading = 1.0f; // Optional
 		multisampling.pSampleMask = nullptr; // Optional
 		multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -1381,7 +1417,11 @@ private:
 		swapChainFramebuffers.resize(swapChainImageViews.size());
 
 		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-			std::array<VkImageView,2> attachments = { swapChainImageViews[i],depthImageView };
+			std::array<VkImageView,3> attachments = { 
+				colorImageView,
+				depthImageView,
+				swapChainImageViews[i],
+			};
 
 			VkFramebufferCreateInfo framebufferInfo = {};
 			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
