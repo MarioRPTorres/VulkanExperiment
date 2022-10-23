@@ -124,6 +124,4 @@ struct SwapChainSupportDetails {
 };
 
 
-void loadModel();
-
 #endif
