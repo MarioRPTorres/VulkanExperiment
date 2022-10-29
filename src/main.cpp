@@ -21,6 +21,8 @@ const int MAX_FRAME_IN_FLIGHT = 2;
 const std::string MODEL_PATH = "models/cottage_obj.obj";
 const std::string TEXTURE_PATH = "textures/texture_1.png";
 
+const std::array<std::string, 2> textures = { "textures/texture_1.png", "textures/texture_2.png" };
+
 std::vector<uint32_t> indices = {};
 std::vector<Vertex> vertices = {};
 
@@ -208,10 +210,10 @@ private:
 	VkDescriptorPool descriptorPool;
 	std::vector<VkDescriptorSet> descriptorSets; 
 	uint32_t mipLevels;
-	VkImage textureImage;
-	VkDeviceMemory textureImageMemory;
-	VkImageView textureImageView;
-	VkSampler textureSampler;
+	VkImage textureImage = VK_NULL_HANDLE;
+	VkDeviceMemory textureImageMemory = VK_NULL_HANDLE;
+	VkImageView textureImageView = VK_NULL_HANDLE;
+	VkSampler textureSampler = VK_NULL_HANDLE;
 	VkImage depthImage;
 	VkDeviceMemory depthImageMemory;
 	VkImageView depthImageView;
@@ -221,7 +223,10 @@ private:
 	VkDeviceMemory colorImageMemory;
 	VkImageView colorImageView;
 
-	std::array<VkImage, 2> textureImages;
+	std::array<VkImage, textures.size()> textureImages;
+	std::array<VkDeviceMemory, textures.size()> textureImageMemories;
+	std::array<VkImageView, textures.size()> textureImageViews;
+	std::array<VkSampler, textures.size()> textureSamplers;
 	int loadedTexture = 0;
 
 	bool framebufferResized = false;
@@ -265,9 +270,10 @@ private:
 		createColorResources();
 		createDepthResources();
 		createFramebuffers();
-		createTextureImage();
-		createTextureImageView();
-		createTextureSampler();
+		//createTextureImage();
+		//createTextureImageView();
+		//createTextureSampler();
+		createTextureImages();
 		createVertexBuffer();
 		createIndexBuffer();
 		createUniformBuffers();
@@ -290,10 +296,16 @@ private:
 	void cleanup() {
 		cleanupSwapChain();
 
-		vkDestroySampler(device, textureSampler, nullptr);
-		vkDestroyImageView(device, textureImageView, nullptr);
-		vkDestroyImage(device, textureImage, nullptr);
-		vkFreeMemory(device, textureImageMemory, nullptr);
+		for (size_t i = 0; i < textures.size(); i++) {
+			if (textureSamplers[i] != VK_NULL_HANDLE) vkDestroySampler(device, textureSamplers[i], nullptr);
+			if (textureImageViews[i] != VK_NULL_HANDLE) vkDestroyImageView(device, textureImageViews[i], nullptr);
+			if (textureImages[i] != VK_NULL_HANDLE) vkDestroyImage(device, textureImages[i], nullptr);
+			if (textureImageMemories[i] != VK_NULL_HANDLE) vkFreeMemory(device, textureImageMemories[i], nullptr);
+		}
+		if (textureSampler != VK_NULL_HANDLE) vkDestroySampler(device, textureSampler, nullptr);
+		if (textureImageView != VK_NULL_HANDLE) vkDestroyImageView(device, textureImageView, nullptr);
+		if (textureImage != VK_NULL_HANDLE) vkDestroyImage(device, textureImage, nullptr);
+		if (textureImageMemory != VK_NULL_HANDLE) vkFreeMemory(device, textureImageMemory, nullptr);
 		// Here there is a choice for the Allocator function
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 		vkDestroyBuffer(device, indexBuffer, nullptr);
@@ -486,7 +498,6 @@ private:
 		if (enableValidationLayers) {
 			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
-
 		return extensions;
 	}
 
@@ -1957,7 +1968,7 @@ private:
 
 		VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
 		samplerLayoutBinding.binding = 1;
-		samplerLayoutBinding.descriptorCount = 1;
+		samplerLayoutBinding.descriptorCount = static_cast<uint32_t>(textures.size());
 		samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		samplerLayoutBinding.pImmutableSamplers = nullptr;
 		samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -1981,7 +1992,7 @@ private:
 
 		// Pool for combined image sampler
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size()*textures.size());
 
 		VkDescriptorPoolCreateInfo poolInfo = {};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -2018,10 +2029,12 @@ private:
 			bufferInfo.offset = 0;
 			bufferInfo.range = sizeof(UniformBufferObject);
 		
-			VkDescriptorImageInfo imageInfo = {};
-			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imageInfo.imageView = textureImageView;
-			imageInfo.sampler = textureSampler;
+			std::array<VkDescriptorImageInfo, textures.size()> imagesInfo;
+			for (size_t i = 0; i < textures.size(); i++) {
+				imagesInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				imagesInfo[i].imageView = textureImageViews[i];
+				imagesInfo[i].sampler = textureSamplers[i];
+			}
 
 			std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
 
@@ -2040,8 +2053,8 @@ private:
 			descriptorWrites[1].dstBinding = 1;
 			descriptorWrites[1].dstArrayElement = 0;
 			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			descriptorWrites[1].descriptorCount = 1;
-			descriptorWrites[1].pImageInfo = &imageInfo;
+			descriptorWrites[1].descriptorCount = static_cast<uint32_t>(imagesInfo.size());
+			descriptorWrites[1].pImageInfo = imagesInfo.data();
 
 			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 		}
@@ -2544,14 +2557,119 @@ private:
 
 		colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
+
+	void createTextureImages() {
+
+		for (size_t i = 0; i < textures.size(); i++) {
+
+			int texWidth, texHeight, texChannels;
+
+			cv::Mat matImage = loadImage(textures[i]);
+			VkDeviceSize imageSize = matImage.total() * matImage.elemSize();
+
+			texWidth = matImage.cols;
+			texHeight = matImage.rows;
+			texChannels = 4;
+
+			VkBuffer stagingBuffer;
+			VkDeviceMemory stagingBufferMemory;
+
+			createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer,
+				stagingBufferMemory);
+
+			void* data;
+			vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+			memcpy(data, matImage.data, static_cast<size_t>(imageSize));
+			vkUnmapMemory(device, stagingBufferMemory);
+
+			matImage.release();
+
+			mipLevels = 5;
+			createImage(
+				texWidth,
+				texHeight,
+				mipLevels,
+				VK_SAMPLE_COUNT_1_BIT,
+				VK_FORMAT_R8G8B8A8_SRGB,
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				textureImages[i],
+				textureImageMemories[i]);
+
+			transitionImageLayout(textureImages[i], VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
+			copyBufferToImage(stagingBuffer, textureImages[i], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+
+			generateMipmaps(textureImages[i], VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+
+			vkDestroyBuffer(device, stagingBuffer, nullptr);
+			vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+			textureImageViews[i] = createImageView(textureImages[i], VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
+
+			createImageSampler(textureSamplers[i], mipLevels);
+		}
+	}
+
+	void createImageSampler(VkSampler& sampler,uint32_t mipLevels) {		
+		// Sampler is a separate object that can be used on any image and doesn't reference the image anywhere
+		VkSamplerCreateInfo samplerInfo = {};
+		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		/*
+		* VK_FILTER_LINEAR
+		* VK_FILTER_NEAREST
+		*/
+		// Filter for oversampling 
+		samplerInfo.magFilter = VK_FILTER_LINEAR;
+		// Filter for undersampling
+		samplerInfo.minFilter = VK_FILTER_LINEAR;
+		/*
+		Address mode: What happens when reading texels outside the picture
+		• VK_SAMPLER_ADDRESS_MODE_REPEAT: Repeat the texture when going beyond the image dimensions.
+		• VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT: Like repeat, but inverts
+			the coordinates to mirror the image when going beyond the dimensions.
+		• VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE: Take the color of the edge
+			closest to the coordinate beyond the image dimensions.
+		• VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE: Like clamp to edge,
+			but instead uses the edge opposite to the closest edge.
+		• VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER: Return a solid color
+			when sampling beyond the dimensions of the image.
+		*/
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		// Unless for performance reasons always enable anisotropic filter
+		samplerInfo.anisotropyEnable = VK_TRUE;
+		samplerInfo.maxAnisotropy = 16;
+		// Color when address mode is clamp to border.
+		// Can be Black, white or transparent
+		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+		// Whether to normalize the coordinates to [0,1]
+		samplerInfo.unnormalizedCoordinates = VK_FALSE;
+		// used for percentage-closer filtering on shadow maps
+		samplerInfo.compareEnable = VK_FALSE;
+		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+		// Filtering for mipmapping
+		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		samplerInfo.mipLodBias = 0;
+		samplerInfo.minLod = 0; // minimum level of detail to choose mip levels
+		samplerInfo.maxLod = static_cast<float>(mipLevels); // maximum level of detail to choose mip levels
+
+
+		if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture sampler!");
+		}
+	}
 };
 
 
 
 int main() {
 
-	// generateVertices(vertices,indices);
-	loadModel();
+	generateVertices(vertices,indices);
+	// loadModel();
 	compileShaders();
 	HelloTriangleApplication app;
 
