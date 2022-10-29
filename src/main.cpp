@@ -23,6 +23,8 @@ const std::string TEXTURE_PATH = "textures/texture_1.png";
 
 const std::array<std::string, 2> textures = { "textures/texture_1.png", "textures/texture_2.png" };
 
+const std::array<std::string, 2> updatedTexture = { "textures/texture_1_1.png", "textures/texture_2_1.png" };
+
 std::vector<uint32_t> indices = {};
 std::vector<Vertex> vertices = {};
 
@@ -223,10 +225,7 @@ private:
 	VkDeviceMemory colorImageMemory;
 	VkImageView colorImageView;
 
-	std::array<VkImage, textures.size()> textureImages;
-	std::array<VkDeviceMemory, textures.size()> textureImageMemories;
-	std::array<VkImageView, textures.size()> textureImageViews;
-	std::array<VkSampler, textures.size()> textureSamplers;
+	std::array<SampledImage, textures.size()> textureImages;
 	int loadedTexture = 0;
 
 	bool framebufferResized = false;
@@ -297,10 +296,10 @@ private:
 		cleanupSwapChain();
 
 		for (size_t i = 0; i < textures.size(); i++) {
-			if (textureSamplers[i] != VK_NULL_HANDLE) vkDestroySampler(device, textureSamplers[i], nullptr);
-			if (textureImageViews[i] != VK_NULL_HANDLE) vkDestroyImageView(device, textureImageViews[i], nullptr);
-			if (textureImages[i] != VK_NULL_HANDLE) vkDestroyImage(device, textureImages[i], nullptr);
-			if (textureImageMemories[i] != VK_NULL_HANDLE) vkFreeMemory(device, textureImageMemories[i], nullptr);
+			if (textureImages[i].sampler != VK_NULL_HANDLE) vkDestroySampler(device, textureImages[i].sampler, nullptr);
+			if (textureImages[i].view != VK_NULL_HANDLE) vkDestroyImageView(device, textureImages[i].view, nullptr);
+			if (textureImages[i].image != VK_NULL_HANDLE) vkDestroyImage(device, textureImages[i].image, nullptr);
+			if (textureImages[i].memory != VK_NULL_HANDLE) vkFreeMemory(device, textureImages[i].memory, nullptr);
 		}
 		if (textureSampler != VK_NULL_HANDLE) vkDestroySampler(device, textureSampler, nullptr);
 		if (textureImageView != VK_NULL_HANDLE) vkDestroyImageView(device, textureImageView, nullptr);
@@ -2032,8 +2031,8 @@ private:
 			std::array<VkDescriptorImageInfo, textures.size()> imagesInfo;
 			for (size_t i = 0; i < textures.size(); i++) {
 				imagesInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				imagesInfo[i].imageView = textureImageViews[i];
-				imagesInfo[i].sampler = textureSamplers[i];
+				imagesInfo[i].imageView = textureImages[i].view;
+				imagesInfo[i].sampler = textureImages[i].sampler;
 			}
 
 			std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
@@ -2596,20 +2595,20 @@ private:
 				VK_IMAGE_TILING_OPTIMAL,
 				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-				textureImages[i],
-				textureImageMemories[i]);
+				textureImages[i].image,
+				textureImages[i].memory);
 
-			transitionImageLayout(textureImages[i], VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
-			copyBufferToImage(stagingBuffer, textureImages[i], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+			transitionImageLayout(textureImages[i].image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
+			copyBufferToImage(stagingBuffer, textureImages[i].image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
-			generateMipmaps(textureImages[i], VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+			generateMipmaps(textureImages[i].image, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
 
 			vkDestroyBuffer(device, stagingBuffer, nullptr);
 			vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-			textureImageViews[i] = createImageView(textureImages[i], VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
+			textureImages[i].view = createImageView(textureImages[i].image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
 
-			createImageSampler(textureSamplers[i], mipLevels);
+			createImageSampler(textureImages[i].sampler, mipLevels);
 		}
 	}
 
