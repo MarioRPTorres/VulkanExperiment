@@ -233,6 +233,7 @@ private:
 	int descriptorGroup = 0;
 
 	bool framebufferResized = false;
+	std::chrono::steady_clock::time_point startTime;
 
 	void initWindow() {
 		// Initiates the GLFW library
@@ -288,9 +289,22 @@ private:
 
 	void mainLoop() {
 		// Event Handler
+		startTime = std::chrono::high_resolution_clock::now();
+		static auto lastTime = std::chrono::high_resolution_clock::now();
 		while (!glfwWindowShouldClose(window)) {
 			glfwPollEvents();
 			drawFrame();
+
+
+			auto currentTime = std::chrono::high_resolution_clock::now();
+			float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
+			if (time > 5.0f) {
+				lastTime = std::chrono::high_resolution_clock::now();
+				descriptorGroup = (descriptorGroup+1)%MIRROR_DESCRIPTOR_SET_COUNT;
+				// First wait for device to be idle so that all resources are free from use
+				vkDeviceWaitIdle(device);
+				writeCommandBuffers();
+			}
 		}
 
 		vkDeviceWaitIdle(device);
@@ -1860,7 +1874,6 @@ private:
 	}
 
 	void updateUniformBuffer(uint32_t currentImage) {
-		static auto startTime = std::chrono::high_resolution_clock::now();
 		
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
@@ -1883,11 +1896,6 @@ private:
 		memcpy(data, &ubo, sizeof(ubo));
 		vkUnmapMemory(device, uniformBuffersMemory[currentImage]);
 
-		static bool updatedImage = false;
-		if (!updatedImage && time > 20.0f) {
-			updatedImage = true;
-			descriptorGroup = 1;
-		}
 	}
 
 	void createDescriptorSetLayout() {
@@ -2573,7 +2581,10 @@ private:
 	}
 
 	void writeCommandBuffers() {
+
+		vkResetCommandPool(device, commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 		for (size_t i = 0; i < commandBuffers.size(); i++) {
+
 			VkCommandBufferBeginInfo beginInfo = {};
 			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 			//• VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT : The command buffer will be rerecorded right after 

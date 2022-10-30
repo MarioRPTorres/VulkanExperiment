@@ -4,7 +4,7 @@ const float pi = 3.14159265358979323846264338327950288;
 const float dAngle = pi / 60;
 const float dr = 0.5f;
 
-float r = 50.0f;
+float r = 20.0f;
 const float t0 = 0.0f;
 const float phi0 = pi / 2;
 
