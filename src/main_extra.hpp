@@ -4,7 +4,7 @@ const float pi = 3.14159265358979323846264338327950288;
 const float dAngle = pi / 60;
 const float dr = 0.5f;
 
-float r = 50.0f;
+float r = 20.0f;
 const float t0 = 0.0f;
 const float phi0 = pi / 2;
 
@@ -228,15 +228,15 @@ botchedModel pyramid = {
 
 botchedModel tutorial = {
 	{
-		{ {-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-		{ {0.5f, -0.5f, 0.0f}, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f }},
-		{ {0.5f, 0.5f, 0.0f}, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f }},
-		{ {-0.5f, 0.5f, 0.0f}, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f }},
+		{ {-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}, 0},
+		{ {0.5f, -0.5f, 0.0f}, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f },0},
+		{ {0.5f, 0.5f, 0.0f}, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f },0},
+		{ {-0.5f, 0.5f, 0.0f}, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f },0},
 
-		{ {-0.5f, -0.5f, -0.5f},{ 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f }},
-		{ {0.5f, -0.5f, -0.5f}, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f }},
-		{ {0.5f, 0.5f, -0.5f},  { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f }},
-		{ {-0.5f, 0.5f, -0.5f}, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f }}
+		{ {-0.5f, -0.5f, -0.5f},{ 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f },1},
+		{ {0.5f, -0.5f, -0.5f}, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f },1},
+		{ {0.5f, 0.5f, -0.5f},  { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f },1},
+		{ {-0.5f, 0.5f, -0.5f}, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f },1}
 	},
 	{
 		0, 1, 2, 2, 3, 0,
@@ -265,3 +265,11 @@ void generateVertices(std::vector<Vertex>& vert, std::vector<uint32_t>& ind) {
 	if (m.preSPT)
 		m.preSPT(vert, ind);
 }
+
+
+typedef struct _SampledImage {
+	VkImage image = VK_NULL_HANDLE;
+	VkDeviceMemory memory = VK_NULL_HANDLE;
+	VkImageView view = VK_NULL_HANDLE;
+	VkSampler sampler = VK_NULL_HANDLE;
+} SampledImage;

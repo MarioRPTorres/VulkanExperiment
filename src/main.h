@@ -43,6 +43,8 @@ struct Vertex {
 	alignas(16) glm::vec3 pos;
 	alignas(16) glm::vec3 color;
 	alignas(8) glm::vec2 texCoord;
+	alignas(4) int texId;
+
 
 	static VkVertexInputBindingDescription getBindingDescription() {
 		// Binding Description tells the rate at which vertex data is coming in
@@ -54,9 +56,9 @@ struct Vertex {
 		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 		return bindingDescription;
 	}
-	static std::array<VkVertexInputAttributeDescription, 3>getAttributeDescriptions() {
+	static std::array<VkVertexInputAttributeDescription, 4>getAttributeDescriptions() {
 		// This struct tells how to extract a vertex attribute from a vertex. Since we have two attributes, position and color, we have an array of two structs.
-		std::array<VkVertexInputAttributeDescription, 3>attributeDescriptions = {};
+		std::array<VkVertexInputAttributeDescription, 4>attributeDescriptions = {};
 		attributeDescriptions[0].binding = 0;
 		attributeDescriptions[0].location = 0;
 		//• float: VK_FORMAT_R32_SFLOAT
@@ -73,8 +75,14 @@ struct Vertex {
 
 		attributeDescriptions[2].binding = 0;
 		attributeDescriptions[2].location = 2;
-		attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
 		attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+
+
+		attributeDescriptions[3].binding = 0;
+		attributeDescriptions[3].location = 3;
+		attributeDescriptions[3].format = VK_FORMAT_R32_SINT;
+		attributeDescriptions[3].offset = offsetof(Vertex, texId);
 		return attributeDescriptions;
 	}
 
