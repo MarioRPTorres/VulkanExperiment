@@ -133,8 +133,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 		if (near) near = false;
 	}
 
-	printf("Theta: %f, Phi: %f, r: %f ; ", t1, phi1, r);
-	printf("Camera Eye: %f , %f , %f\n", cameraEye[0], cameraEye[1], cameraEye[2]);
+	//printf("Theta: %f, Phi: %f, r: %f ; ", t1, phi1, r);
+	//printf("Camera Eye: %f , %f , %f\n", cameraEye[0], cameraEye[1], cameraEye[2]);
 }
 
 
