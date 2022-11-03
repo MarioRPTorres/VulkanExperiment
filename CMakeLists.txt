@@ -14,8 +14,7 @@ include_directories(./src )
 # Create the project target
 add_executable(${PROJECT_TARGET} 
 	src/main.cpp
-    src/main_extra.hpp
-)
+ "src/vulkan_engine.cpp" "src/glfwInteraction.cpp" "src/importResources.cpp")
 
 # Add libs
 # add_subdirectory("libs")
