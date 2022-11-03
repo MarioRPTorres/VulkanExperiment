@@ -12,6 +12,7 @@ Future Feature:
 • Multiple subpasses
 • Compute shaders
 */
+typedef std::vector<char> shaderCode;
 
 const int WIDTH = 640;
 const int HEIGHT = 480;
@@ -228,6 +229,9 @@ private:
 	VkDeviceMemory colorImageMemory;
 	VkImageView colorImageView;
 
+	shaderCode vert;
+	shaderCode frag;
+
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	int descriptorGroup = 0;
@@ -269,7 +273,9 @@ private:
 		createImageViews();
 		createRenderPass();
 		createDescriptorSetLayout();
-		createGraphicsPipeline();
+		vert = readFile("./vert.spv");
+		frag = readFile("./frag.spv");
+		createGraphicsPipeline(vert,frag);
 		createCommandPool();
 		createColorResources();
 		createDepthResources();
@@ -283,7 +289,10 @@ private:
 		createUniformBuffers();
 		createDescriptorPool();
 		createDescriptorSets();
+		updateDescriptorSet(textureImages, 0);
+		updateDescriptorSet(updatedTextureImages, 1);
 		createCommandBuffers();
+		writeCommandBuffers();
 		createSyncObjects();
 	}
 
@@ -410,14 +419,17 @@ private:
 		createImageViews();
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createRenderPass();
-		createGraphicsPipeline();
+		createGraphicsPipeline(vert,frag);
 		createColorResources();
 		createDepthResources();
 		createFramebuffers();
 		createUniformBuffers();
 		createDescriptorPool();
 		createDescriptorSets();
+		updateDescriptorSet(textureImages, 0);
+		updateDescriptorSet(updatedTextureImages, 1);
 		createCommandBuffers();
+		writeCommandBuffers();
 	}
 
 	void createInstance() {
@@ -1188,16 +1200,14 @@ private:
 		return shaderModule;
 	}
 
-	void createGraphicsPipeline() {
-		auto vertShaderCode = readFile("./vert.spv");
-		auto fragShaderCode = readFile("./frag.spv");
+	void createGraphicsPipeline(shaderCode vert,shaderCode frag) {
 
 		// Shader modules are only a thin wrapper around the shader bytecode. 
 		// As soon as the graphics pipeline is created the shader modules are no longer needed
 		// hence these can be made as local variables instead of class members. They must be 
 		// destroyed by as call of vkDestroyShaderModule
-		VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+		VkShaderModule vertShaderModule = createShaderModule(vert);
+		VkShaderModule fragShaderModule = createShaderModule(frag);
 
 		VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
 		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1971,9 +1981,6 @@ private:
 				throw std::runtime_error("failed to allocate descriptor sets!");
 			}
 		}
-
-		updateDescriptorSet(textureImages,0);
-		updateDescriptorSet(updatedTextureImages, 1);
 	}
 
 	void createImage(uint32_t width, uint32_t height, 
