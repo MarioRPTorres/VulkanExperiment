@@ -16,6 +16,9 @@ add_executable(${PROJECT_TARGET}
 	src/main.cpp
  "src/vulkan_engine.cpp" "src/glfwInteraction.cpp" "src/importResources.cpp")
 
+ # Define macros
+target_compile_definitions(${PROJECT_TARGET} PRIVATE IMGUI_EXT)
+
 # Add libs
 # add_subdirectory("libs")
 
@@ -42,6 +45,34 @@ target_link_libraries(${PROJECT_TARGET} PRIVATE glfw )
 find_package(Vulkan REQUIRED)
 
 target_link_libraries(${PROJECT_TARGET} PRIVATE "Vulkan::Vulkan")
+
+
+#=================== IMGUI ===================
+# Dear Imgui Library Docking WIP 1.88
+set(IMGUI_DIR ".\\libs\\imgui")
+add_library(IMGUI STATIC)
+
+target_sources( IMGUI
+                PRIVATE
+                    ${IMGUI_DIR}/imgui_demo.cpp
+                    ${IMGUI_DIR}/imgui_draw.cpp
+                    ${IMGUI_DIR}/imgui_tables.cpp
+                    ${IMGUI_DIR}/imgui_widgets.cpp
+                    ${IMGUI_DIR}/imgui.cpp
+
+                PRIVATE
+                    ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
+                    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+                )
+
+target_include_directories( IMGUI
+                            PUBLIC ${IMGUI_DIR}
+                            PUBLIC ${IMGUI_DIR}/backends
+                            )
+
+target_link_libraries(IMGUI PUBLIC glfw "Vulkan::Vulkan")
+
+target_link_libraries(${PROJECT_TARGET} PRIVATE IMGUI)
 
 #=================== opencv 4.6.0 ===================
 
