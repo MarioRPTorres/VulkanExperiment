@@ -7,7 +7,7 @@
 
 
 #ifdef IMGUI_EXT
-const bool enableImgui = false;
+const bool enableImgui = true;
 #else
 const bool enableImgui = false;
 #endif
@@ -43,6 +43,15 @@ const std::array<std::string, MAX_SAMPLED_IMAGES> updatedTextures = { "textures/
 
 std::vector<uint32_t> indices = {};
 std::vector<Vertex> vertices = {};
+
+void imguiBuildUI() {
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+	ImGui::ShowDemoWindow();
+	ImGui::Render();
+}
+
 
 static void check_vk_result(VkResult err)
 {
@@ -148,9 +157,12 @@ private:
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
-	VkRenderPass imguiRenderPass;
-	VkCommandPool imguiCommandPool;
+	VkRenderPass imguiRenderPass = VK_NULL_HANDLE;
+	std::vector<VkFramebuffer> imguiFrameBuffers;
+	VkCommandPool imguiCommandPool = VK_NULL_HANDLE;
 	std::vector<VkCommandBuffer> imguiCommandBuffers;
+	uint32_t imageIndex;
+	bool swapChainOutdated = false;
 
 	void initWindow() {
 		// Initiates the GLFW library
@@ -184,13 +196,22 @@ private:
 		createLogicalDevice();
 		createSwapChain();
 		createSwapChainImageViews();
-		if (enableImgui) createImguiRenderPasses(); else createRenderPass();
+		if (enableImgui) {
+			createImguiRenderPasses();
+			createImguiFrameBuffers();
+			createImguiCommandPool();
+			createImguiCommandBuffers();
+			createImguiDescriptorPool();
+		} 
+		else {
+			createRenderPass();
+			createDescriptorPool();
+		}
 		createDescriptorSetLayout();
 		vert = readFile("./vert.spv");
 		frag = readFile("./frag.spv");
 		createGraphicsPipeline(vert, frag);
 		createCommandPool();
-		if (enableImgui) createImguiCommandPool();
 		createColorResources();
 		createDepthResources();
 		createFramebuffers();
@@ -203,7 +224,6 @@ private:
 		createSampledImage(textureImages[1], textures[1]);
 		createSampledImage(updatedTextureImages[1], updatedTextures[1]);
 
-		if (enableImgui) createImguiDescriptorPool();	else createDescriptorPool();
 		createDescriptorSets();
 		updateDescriptorSet(textureImages, 0);
 		updateDescriptorSet(updatedTextureImages, 1);
@@ -263,8 +283,22 @@ private:
 		static auto lastTime = std::chrono::high_resolution_clock::now();
 		while (!glfwWindowShouldClose(window)) {
 			glfwPollEvents();
+
+			if (enableImgui) imguiBuildUI();
 			drawFrame();
 
+			// Update and Render additional Platform Windows
+			if (enableImgui){
+				static ImGuiIO& imguiIo = ImGui::GetIO(); (void)imguiIo;
+				if (imguiIo.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+					ImGui::UpdatePlatformWindows();
+					ImGui::RenderPlatformWindowsDefault();
+				}
+			}
+			if (swapChainOutdated)
+				recreateSwapChain();
+			else
+				presentFrame();
 
 			auto currentTime = std::chrono::high_resolution_clock::now();
 			float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
@@ -304,7 +338,15 @@ private:
 		// Here there is a choice for the Allocator function
 		vkDestroyCommandPool(device, commandPool, nullptr);
 		if (transientcommandPool != commandPool) vkDestroyCommandPool(device, transientcommandPool, nullptr);
-		if (enableImgui) vkDestroyCommandPool(device, imguiCommandPool, nullptr);
+		
+		if (enableImgui) {
+			// Resources to destroy when the program ends
+			vkDestroyCommandPool(device, imguiCommandPool, nullptr);
+			ImGui_ImplVulkan_Shutdown();
+			ImGui_ImplGlfw_Shutdown();
+			ImGui::DestroyContext();
+		}
+
 		vkDestroyDevice(device, nullptr);
 
 		if (enableValidationLayers) {
@@ -334,8 +376,12 @@ private:
 		vkDestroyPipeline(device, graphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 		if (enableImgui) {
-			vkDestroyRenderPass(device, imguiRenderPass, nullptr);
+			for (size_t i = 0; i < imguiFrameBuffers.size(); i++) {
+				vkDestroyFramebuffer(device, imguiFrameBuffers[i], nullptr);
+			}
 			vkFreeCommandBuffers(device, imguiCommandPool, static_cast<uint32_t>(imguiCommandBuffers.size()), imguiCommandBuffers.data());
+			vkDestroyRenderPass(device, imguiRenderPass, nullptr);
+		
 		}
 		vkDestroyRenderPass(device, renderPass, nullptr);
 
@@ -353,6 +399,7 @@ private:
 	}
 
 	void recreateSwapChain() {
+		swapChainOutdated = false;
 		// Swap chain recreation for events like window resizing
 
 		int width = 0, height = 0;
@@ -362,6 +409,8 @@ private:
 			glfwGetFramebufferSize(window, &width, &height);
 			glfwWaitEvents();
 		}
+
+		
 
 		// First wait for device to be idle so that all resources are free from use
 		vkDeviceWaitIdle(device);
@@ -373,8 +422,12 @@ private:
 		createSwapChainImageViews();
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		if (enableImgui) {
+			SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+			ImGui_ImplVulkan_SetMinImageCount(swapChainSupport.capabilities.minImageCount);
 			createImguiRenderPasses();
 			createImguiDescriptorPool();
+			createImguiFrameBuffers();
+			createImguiCommandBuffers();
 		}	
 		else {
 			createRenderPass();
@@ -438,7 +491,6 @@ private:
 		// or across command queues. If we want to syncronize calls between the application and the rendering operations, we should use fences instead.
 
 
-		uint32_t imageIndex;
 
 		// vkAcquireNextImageKHR arguments
 		//• Logical Device
@@ -457,7 +509,7 @@ private:
 
 		// Using the result we can check if the swapchain is out of data and if so we need to recreate it
 		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-			recreateSwapChain();
+			swapChainOutdated = true;
 			return;
 		}
 		else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) { // Since we already adquired an image we can still draw even if its suboptimal
@@ -473,6 +525,38 @@ private:
 		imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
 		updateUniformBuffer(imageIndex);
+
+		std::vector<VkCommandBuffer> submitCommmandBuffers = { commandBuffers[imageIndex] };
+		VkResult err;
+		if (enableImgui) {
+			err = vkResetCommandBuffer(imguiCommandBuffers[imageIndex], 0);
+			check_vk_result(err);
+			VkCommandBufferBeginInfo info = {};
+			info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+			err = vkBeginCommandBuffer(imguiCommandBuffers[imageIndex], &info);
+			check_vk_result(err);
+
+			VkClearValue clearValue = { 0.0f,0.0f ,0.0f ,0.0f };
+			VkRenderPassBeginInfo imguiRenderPassBeginInfo = {};
+			imguiRenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			imguiRenderPassBeginInfo.renderPass = imguiRenderPass;
+			imguiRenderPassBeginInfo.framebuffer = imguiFrameBuffers[imageIndex];
+			imguiRenderPassBeginInfo.renderArea.extent.width = swapChainExtent.width;
+			imguiRenderPassBeginInfo.renderArea.extent.height = swapChainExtent.height;
+			imguiRenderPassBeginInfo.clearValueCount = 1;
+			imguiRenderPassBeginInfo.pClearValues = &clearValue;
+			vkCmdBeginRenderPass(imguiCommandBuffers[imageIndex], &imguiRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+			// Record Imgui Draw Data and draw funcs into command buffer
+			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), imguiCommandBuffers[imageIndex]);
+			// Submit command buffer
+			vkCmdEndRenderPass(imguiCommandBuffers[imageIndex]);
+			err = vkEndCommandBuffer(imguiCommandBuffers[imageIndex]);
+			check_vk_result(err);
+
+			submitCommmandBuffers.push_back(imguiCommandBuffers[imageIndex]);
+		}
 
 		VkSubmitInfo submitInfo = {};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -490,8 +574,8 @@ private:
 		submitInfo.pWaitDstStageMask = waitStages;
 
 		// Commands to execute
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+		submitInfo.commandBufferCount = static_cast<uint32_t>(submitCommmandBuffers.size());
+		submitInfo.pCommandBuffers = submitCommmandBuffers.data();
 
 		VkSemaphore signalSemaphores[] = { renderFinishedSemaphore[currentFrame] };
 		submitInfo.signalSemaphoreCount = 1;
@@ -505,12 +589,15 @@ private:
 			throw std::runtime_error("failed to submit draw comand buffer!");
 		}
 
+	}
+
+	void presentFrame() {
 		VkPresentInfoKHR presentInfo = {};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 		//The first two parameters specify which semaphores to wait on before presentation
 		//can happen, just like VkSubmitInfo.
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = signalSemaphores;
+		presentInfo.pWaitSemaphores = &renderFinishedSemaphore[currentFrame];
 
 		VkSwapchainKHR swapChains[] = { swapChain };
 		presentInfo.swapchainCount = 1;
@@ -523,7 +610,7 @@ private:
 		// after a window resize.
 		//• VK_SUBOPTIMAL_KHR : The swap chain can still be used to successfully present to the surface, but the surface properties are no longer matched
 		// exactly.
-		result = vkQueuePresentKHR(presentQueue, &presentInfo);
+		VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
 		// Using the result we can check if the swapchain is out of data and if so we need to recreate it
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
@@ -750,7 +837,7 @@ private:
 	}
 
 	void createImguiCommandBuffers(){
-		imguiCommandBuffers.resize(swapChainFramebuffers.size());
+		imguiCommandBuffers.resize(swapChainImageViews.size());
 		VkCommandBufferAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.commandPool = imguiCommandPool;
@@ -761,6 +848,28 @@ private:
 
 		if (vkAllocateCommandBuffers(device, &allocInfo, imguiCommandBuffers.data()) != VK_SUCCESS) {
 			throw std::runtime_error("failed to allocate imgui command buffers!");
+		}
+	}
+
+	void createImguiFrameBuffers() {
+		imguiFrameBuffers.resize(swapChainImageViews.size());
+
+		for (int i = 0; i < swapChainImageViews.size(); i++) {
+			VkImageView attachment = swapChainImageViews[i];
+
+			VkFramebufferCreateInfo frameBufferInfo = {};
+			frameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			frameBufferInfo.renderPass = imguiRenderPass;
+			frameBufferInfo.attachmentCount = 1;
+			frameBufferInfo.pAttachments = &attachment;
+			frameBufferInfo.width = swapChainExtent.width;
+			frameBufferInfo.height = swapChainExtent.height;
+			frameBufferInfo.layers = 1;
+
+			// Here there is a choice for the Allocator function
+			if (vkCreateFramebuffer(device, &frameBufferInfo, nullptr, &imguiFrameBuffers[i]) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create imgui framebuffer!");
+			}
 		}
 	}
 };
