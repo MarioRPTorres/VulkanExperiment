@@ -14,7 +14,7 @@ include_directories(./src )
 # Create the project target
 add_executable(${PROJECT_TARGET} 
 	src/main.cpp
- "src/vulkan_engine.cpp" "src/glfwInteraction.cpp" "src/importResources.cpp")
+ "src/vulkan_engine.cpp" "src/glfwInteraction.cpp" "src/importResources.cpp" "src/vulkan_imgui.cpp")
 
  # Define macros
 target_compile_definitions(${PROJECT_TARGET} PRIVATE IMGUI_EXT)
