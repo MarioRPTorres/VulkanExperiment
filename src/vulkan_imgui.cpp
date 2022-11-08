@@ -24,7 +24,8 @@ void initImgui(VulkanEngine* vk,VulkanImguiDeviceObjects& imObj) {
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
-	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
+	// This feature causes imgui to create new graphic pipelines and render passes that are incompatible 
+	//io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
 	//io.ConfigViewportsNoAutoMerge = true;
 	//io.ConfigViewportsNoTaskBarIcon = true;
 
@@ -208,7 +209,6 @@ void createImguiFrameBuffers(VkDevice device, SwapChainDetails sc,VulkanImguiDev
 }
 
 void cleanupImguiObjects(VkDevice device, VulkanImguiDeviceObjects& imObj) {
-	cleanupImguiSwapChainObjects(device, imObj);
 
 	// Resources to destroy when the program ends
 	vkDestroyDescriptorPool(device, imObj.descriptorPool, nullptr);
