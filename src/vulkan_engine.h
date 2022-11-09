@@ -13,8 +13,6 @@
 #include <cstdint> // Necessary for UINT32_MAX
 #include <algorithm> // For std::max/min
 
-#include <opencv2/opencv.hpp>
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm\glm.hpp>
@@ -23,7 +21,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp> // For Vertex hashing
 
-#include <chrono>
 
 #include <vector>
 #include <array>
@@ -283,7 +280,7 @@ protected:
 	void createDescriptorPool();
 	void createDescriptorSets();
 	void createUniformBuffers();
-	void createSampledImage(SampledImage& image, std::string imageFile);
+	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData);
 	void updateDescriptorSet(std::array<SampledImage, MAX_SAMPLED_IMAGES> images, int groupIndex);
 	void writeCommandBuffers();
 

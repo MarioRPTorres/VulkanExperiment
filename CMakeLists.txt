@@ -17,7 +17,7 @@ add_executable(${PROJECT_TARGET}
  "src/vulkan_engine.cpp" "src/glfwInteraction.cpp" "src/importResources.cpp" "src/vulkan_imgui.cpp")
 
  # Define macros
-target_compile_definitions(${PROJECT_TARGET} PRIVATE IMGUI_EXT)
+target_compile_definitions(${PROJECT_TARGET} PRIVATE IMGUI_EXT PHYSICAL_DEVICE_SCORE_SELECTION)
 
 # Add libs
 # add_subdirectory("libs")

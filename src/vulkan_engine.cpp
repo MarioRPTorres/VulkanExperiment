@@ -2,16 +2,6 @@
 
 //********************** External Functions ****************************
 //**********************************************************************
-cv::Mat loadImage(std::string imagePath) {
-	cv::Mat image = cv::imread(imagePath, cv::IMREAD_COLOR); // do grayscale processing?
-
-	if (image.data == NULL) {
-		throw std::runtime_error("failed to load texture image!");
-	}
-	cv::cvtColor(image, image, cv::COLOR_BGR2RGBA, 4);
-
-	return image;
-}
 
 //**************************** Helper Functions ****************************
 ///// Debug CallBack
@@ -1735,15 +1725,9 @@ void VulkanEngine::createImageSampler(VkSampler& sampler, uint32_t mipLevels) {
 	}
 }
 
-void VulkanEngine::createSampledImage(SampledImage& image, std::string imageFile) {
-	int texWidth, texHeight, texChannels;
+void VulkanEngine::createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData) {
+	VkDeviceSize imageSize = rows*cols * elemSize;
 
-	cv::Mat matImage = loadImage(imageFile);
-	VkDeviceSize imageSize = matImage.total() * matImage.elemSize();
-
-	texWidth = matImage.cols;
-	texHeight = matImage.rows;
-	texChannels = 4;
 
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
@@ -1755,15 +1739,13 @@ void VulkanEngine::createSampledImage(SampledImage& image, std::string imageFile
 
 	void* data;
 	vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-	memcpy(data, matImage.data, static_cast<size_t>(imageSize));
+	memcpy(data, imageData, static_cast<size_t>(imageSize));
 	vkUnmapMemory(device, stagingBufferMemory);
-
-	matImage.release();
 
 	mipLevels = 5;
 	createImage(
-		texWidth,
-		texHeight,
+		cols,
+		rows,
 		mipLevels,
 		VK_SAMPLE_COUNT_1_BIT,
 		VK_FORMAT_R8G8B8A8_SRGB,
@@ -1774,9 +1756,9 @@ void VulkanEngine::createSampledImage(SampledImage& image, std::string imageFile
 		image.memory);
 
 	transitionImageLayout(image.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
-	copyBufferToImage(stagingBuffer, image.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+	copyBufferToImage(stagingBuffer, image.image, static_cast<uint32_t>(cols), static_cast<uint32_t>(rows));
 
-	generateMipmaps(image.image, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+	generateMipmaps(image.image, VK_FORMAT_R8G8B8A8_SRGB, cols, rows, mipLevels);
 
 	vkDestroyBuffer(device, stagingBuffer, nullptr);
 	vkFreeMemory(device, stagingBufferMemory, nullptr);

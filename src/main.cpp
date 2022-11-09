@@ -2,6 +2,10 @@
 #include "glfwInteraction.h"
 #include "importResources.h"
 #include "vulkan_imgui.h"
+#include <opencv2/opencv.hpp>
+#include <chrono>
+#include <map>
+
 
 // To include the functions bodies and avoid linker errors
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -60,6 +64,17 @@ namespace std {
 			
 		}
 	};
+}
+
+cv::Mat loadImage(std::string imagePath) {
+	cv::Mat image = cv::imread(imagePath, cv::IMREAD_COLOR); // do grayscale processing?
+
+	if (image.data == NULL) {
+		throw std::runtime_error("failed to load texture image!");
+	}
+	cv::cvtColor(image, image, cv::COLOR_BGR2RGBA, 4);
+
+	return image;
 }
 
 void loadModel() {
@@ -192,10 +207,10 @@ private:
 		createIndexBuffer(indices);
 		createCommandBuffers();
 		createUniformBuffers();
-		createSampledImage(textureImages[0], textures[0]);
-		createSampledImage(updatedTextureImages[0], updatedTextures[0]);
-		createSampledImage(textureImages[1], textures[1]);
-		createSampledImage(updatedTextureImages[1], updatedTextures[1]);
+		createTexture(textureImages[0], textures[0]);
+		createTexture(updatedTextureImages[0], updatedTextures[0]);
+		createTexture(textureImages[1], textures[1]);
+		createTexture(updatedTextureImages[1], updatedTextures[1]);
 
 		createDescriptorPool();
 		createDescriptorSets();
@@ -659,6 +674,13 @@ private:
 		}
 	}
 
+	void createTexture(SampledImage& image, std::string imageFile){
+		cv::Mat matImage = loadImage(imageFile);
+
+		createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(),(char*) matImage.data);
+
+		matImage.release();
+	}
 };
 
 
