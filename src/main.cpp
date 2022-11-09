@@ -1,6 +1,10 @@
 #include "vulkan_engine.h"
 #include "glfwInteraction.h"
 #include "importResources.h"
+#include "vulkan_imgui.h"
+#include <opencv2/opencv.hpp>
+#include <chrono>
+#include <map>
 
 
 // To include the functions bodies and avoid linker errors
@@ -35,6 +39,14 @@ const std::array<std::string, MAX_SAMPLED_IMAGES> updatedTextures = { "textures/
 std::vector<uint32_t> indices = {};
 std::vector<Vertex> vertices = {};
 
+void imguiBuildUI() {
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+	ImGui::ShowDemoWindow();
+	ImGui::Render();
+}
+
 
 
 void compileShaders() {
@@ -52,6 +64,17 @@ namespace std {
 			
 		}
 	};
+}
+
+cv::Mat loadImage(std::string imagePath) {
+	cv::Mat image = cv::imread(imagePath, cv::IMREAD_COLOR); // do grayscale processing?
+
+	if (image.data == NULL) {
+		throw std::runtime_error("failed to load texture image!");
+	}
+	cv::cvtColor(image, image, cv::COLOR_BGR2RGBA, 4);
+
+	return image;
 }
 
 void loadModel() {
@@ -121,6 +144,7 @@ public:
 	void run() {
 		initWindow();
 		initVulkan();
+		if (enableImgui) initImgui((VulkanEngine*)this,imguiObjects);
 		mainLoop();
 		cleanup();
 	}
@@ -131,6 +155,10 @@ private:
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
+	VulkanImguiDeviceObjects imguiObjects;
+	uint32_t imageIndex;
+	bool swapChainOutdated = false;
+
 	void initWindow() {
 		// Initiates the GLFW library
 		glfwInit();
@@ -163,11 +191,14 @@ private:
 		createLogicalDevice();
 		createSwapChain();
 		createSwapChainImageViews();
+		if (enableImgui) {
+			createImguiDeviceObjects((VulkanEngine*)this, imguiObjects);
+		} 
 		createRenderPass();
 		createDescriptorSetLayout();
 		vert = readFile("./vert.spv");
 		frag = readFile("./frag.spv");
-		createGraphicsPipeline(vert,frag);
+		createGraphicsPipeline(vert, frag);
 		createCommandPool();
 		createColorResources();
 		createDepthResources();
@@ -176,10 +207,10 @@ private:
 		createIndexBuffer(indices);
 		createCommandBuffers();
 		createUniformBuffers();
-		createSampledImage(textureImages[0], textures[0]);
-		createSampledImage(updatedTextureImages[0], updatedTextures[0]);
-		createSampledImage(textureImages[1], textures[1]);
-		createSampledImage(updatedTextureImages[1], updatedTextures[1]);
+		createTexture(textureImages[0], textures[0]);
+		createTexture(updatedTextureImages[0], updatedTextures[0]);
+		createTexture(textureImages[1], textures[1]);
+		createTexture(updatedTextureImages[1], updatedTextures[1]);
 
 		createDescriptorPool();
 		createDescriptorSets();
@@ -195,8 +226,22 @@ private:
 		static auto lastTime = std::chrono::high_resolution_clock::now();
 		while (!glfwWindowShouldClose(window)) {
 			glfwPollEvents();
+
+			if (enableImgui) imguiBuildUI();
 			drawFrame();
 
+			// Update and Render additional Platform Windows
+			if (enableImgui){
+				static ImGuiIO& imguiIo = ImGui::GetIO(); (void)imguiIo;
+				if (imguiIo.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+					ImGui::UpdatePlatformWindows();
+					ImGui::RenderPlatformWindowsDefault();
+				}
+			}
+			if (swapChainOutdated)
+				recreateSwapChain();
+			else
+				presentFrame();
 
 			auto currentTime = std::chrono::high_resolution_clock::now();
 			float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
@@ -235,8 +280,13 @@ private:
 		}
 		// Here there is a choice for the Allocator function
 		vkDestroyCommandPool(device, commandPool, nullptr);
-		if (transientcommandPool != commandPool)
-			vkDestroyCommandPool(device, transientcommandPool, nullptr);
+		if (transientcommandPool != commandPool) vkDestroyCommandPool(device, transientcommandPool, nullptr);
+		
+		if (enableImgui) {
+			// Resources to destroy when the program ends
+			cleanupImguiObjects(device, imguiObjects);
+		}
+
 		vkDestroyDevice(device, nullptr);
 
 		if (enableValidationLayers) {
@@ -267,6 +317,10 @@ private:
 		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 		vkDestroyRenderPass(device, renderPass, nullptr);
 
+		if (enableImgui) {
+			cleanupImguiSwapChainObjects(device, imguiObjects);
+		}
+
 		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
 			vkDestroyImageView(device, swapChainImageViews[i], nullptr);
 		}
@@ -281,6 +335,7 @@ private:
 	}
 
 	void recreateSwapChain() {
+		swapChainOutdated = false;
 		// Swap chain recreation for events like window resizing
 
 		int width = 0, height = 0;
@@ -291,6 +346,7 @@ private:
 			glfwWaitEvents();
 		}
 
+		
 		// First wait for device to be idle so that all resources are free from use
 		vkDeviceWaitIdle(device);
 
@@ -301,17 +357,20 @@ private:
 		createSwapChainImageViews();
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createRenderPass();
+		createDescriptorPool();
 		createGraphicsPipeline(vert,frag);
 		createColorResources();
 		createDepthResources();
 		createFramebuffers();
 		createUniformBuffers();
-		createDescriptorPool();
 		createDescriptorSets();
 		updateDescriptorSet(textureImages, 0);
 		updateDescriptorSet(updatedTextureImages, 1);
 		createCommandBuffers();
 		writeCommandBuffers();
+		if (enableImgui) {
+			recreateImguiSwapChainObjects((VulkanEngine*)this, imguiObjects);
+		}
 	}
 
 	void updateUniformBuffer(uint32_t currentImage) {
@@ -357,7 +416,6 @@ private:
 		// or across command queues. If we want to syncronize calls between the application and the rendering operations, we should use fences instead.
 
 
-		uint32_t imageIndex;
 
 		// vkAcquireNextImageKHR arguments
 		//• Logical Device
@@ -376,7 +434,7 @@ private:
 
 		// Using the result we can check if the swapchain is out of data and if so we need to recreate it
 		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-			recreateSwapChain();
+			swapChainOutdated = true;
 			return;
 		}
 		else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) { // Since we already adquired an image we can still draw even if its suboptimal
@@ -392,6 +450,38 @@ private:
 		imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
 		updateUniformBuffer(imageIndex);
+
+		std::vector<VkCommandBuffer> submitCommmandBuffers = { commandBuffers[imageIndex] };
+		VkResult err;
+		if (enableImgui) {
+			err = vkResetCommandBuffer(imguiObjects.commandBuffers[imageIndex], 0);
+			check_vk_result(err);
+			VkCommandBufferBeginInfo info = {};
+			info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+			err = vkBeginCommandBuffer(imguiObjects.commandBuffers[imageIndex], &info);
+			check_vk_result(err);
+
+			VkClearValue clearValue = { 0.0f,0.0f ,0.0f ,0.0f };
+			VkRenderPassBeginInfo imguiRenderPassBeginInfo = {};
+			imguiRenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			imguiRenderPassBeginInfo.renderPass = imguiObjects.renderPass;
+			imguiRenderPassBeginInfo.framebuffer = imguiObjects.frameBuffers[imageIndex];
+			imguiRenderPassBeginInfo.renderArea.extent.width = swapChainExtent.width;
+			imguiRenderPassBeginInfo.renderArea.extent.height = swapChainExtent.height;
+			imguiRenderPassBeginInfo.clearValueCount = 1;
+			imguiRenderPassBeginInfo.pClearValues = &clearValue;
+			vkCmdBeginRenderPass(imguiObjects.commandBuffers[imageIndex], &imguiRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+			// Record Imgui Draw Data and draw funcs into command buffer
+			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), imguiObjects.commandBuffers[imageIndex]);
+			// Submit command buffer
+			vkCmdEndRenderPass(imguiObjects.commandBuffers[imageIndex]);
+			err = vkEndCommandBuffer(imguiObjects.commandBuffers[imageIndex]);
+			check_vk_result(err);
+
+			submitCommmandBuffers.push_back(imguiObjects.commandBuffers[imageIndex]);
+		}
 
 		VkSubmitInfo submitInfo = {};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -409,8 +499,8 @@ private:
 		submitInfo.pWaitDstStageMask = waitStages;
 
 		// Commands to execute
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+		submitInfo.commandBufferCount = static_cast<uint32_t>(submitCommmandBuffers.size());
+		submitInfo.pCommandBuffers = submitCommmandBuffers.data();
 
 		VkSemaphore signalSemaphores[] = { renderFinishedSemaphore[currentFrame] };
 		submitInfo.signalSemaphoreCount = 1;
@@ -424,12 +514,15 @@ private:
 			throw std::runtime_error("failed to submit draw comand buffer!");
 		}
 
+	}
+
+	void presentFrame() {
 		VkPresentInfoKHR presentInfo = {};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 		//The first two parameters specify which semaphores to wait on before presentation
 		//can happen, just like VkSubmitInfo.
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = signalSemaphores;
+		presentInfo.pWaitSemaphores = &renderFinishedSemaphore[currentFrame];
 
 		VkSwapchainKHR swapChains[] = { swapChain };
 		presentInfo.swapchainCount = 1;
@@ -442,7 +535,7 @@ private:
 		// after a window resize.
 		//• VK_SUBOPTIMAL_KHR : The swap chain can still be used to successfully present to the surface, but the surface properties are no longer matched
 		// exactly.
-		result = vkQueuePresentKHR(presentQueue, &presentInfo);
+		VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
 		// Using the result we can check if the swapchain is out of data and if so we need to recreate it
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
@@ -464,6 +557,129 @@ private:
 
 		// Syncronization is only done with GPU-GPU not CPU-GPU so more work can still be submitted. Gpu only waits for the previous operation to be ready.
 		currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
+	}
+
+	void createRenderPass() {
+		// Only difference from the original function is in the final attachment finalLayout. 
+		// In order to have an extra render pass after this one for imgui, the final layout of this render pass needs 
+		// to be VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+		// 
+		// 
+		// Color Attachment creation
+		VkAttachmentDescription colorAttachment = {};
+		colorAttachment.format = swapChainImageFormat;
+		colorAttachment.samples = msaaSamples;
+		//• VK_ATTACHMENT_LOAD_OP_DONT_CARE : Existing contents are undefined;
+		//• VK_ATTACHMENT_LOAD_OP_LOAD : Preserve the existing contents of the attachment
+		//• VK_ATTACHMENT_LOAD_OP_CLEAR : Clear the values to a constant at the	start
+		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		//• VK_ATTACHMENT_STORE_OP_DONT_CARE: Contents of the framebuffer will be undefined after the rendering operation
+		//• VK_ATTACHMENT_STORE_OP_STORE : Rendered contents will be stored in memory and can be read later
+		//We’re interested in seeing the rendered triangle on the screen, so we’re going with the store operation here.
+		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		//Textures and framebuffers in Vulkan are represented by VkImage objects with a certain pixel format,	
+		//however the layout of the pixels in memory can change based on what you’re trying to do with an image.
+		//• VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : Images used as color attachment
+		//• VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : Images to be presented in the swap chain
+		//• VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : Images to be used as destination for a memory copy operation
+		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // Without msaa would be VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+		// Reference to point to the attachment in the attachment array
+		VkAttachmentReference colorAttachmentRef = {};
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+
+		// Depth Attachment creation
+		VkAttachmentDescription depthAttachment = {};
+		depthAttachment.format = findDepthFormat();
+		depthAttachment.samples = msaaSamples;
+		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference depthAttachmentRef = {};
+		depthAttachmentRef.attachment = 1;
+		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+
+		// Color Resolve Attachment creation
+		VkAttachmentDescription colorAttachmentResolve = {};
+		colorAttachmentResolve.format = swapChainImageFormat;
+		colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		// If imgui is enabled there is a second render pass after this one that needs this layout
+		colorAttachmentResolve.finalLayout = (enableImgui ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR); // Only difference from the original function is here
+
+		// Reference to point to the attachment in the attachment array
+		VkAttachmentReference colorAttachmentResolveRef = {};
+		colorAttachmentResolveRef.attachment = 2;
+		colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+
+
+		// Create first subpass with one attachment
+		VkSubpassDescription subpass = {};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+		subpass.pDepthStencilAttachment = &depthAttachmentRef;
+		subpass.pResolveAttachments = &colorAttachmentResolveRef;
+
+		//The following other types of attachments can be referenced by a subpass :
+		//• pInputAttachments : Attachments that are read from a shader
+		//• pResolveAttachments : Attachments used for multisampling color attachments
+		//• pDepthStencilAttachment : Attachment for depth and stencil data
+		//• pPreserveAttachments : Attachments that are not used by this subpass,	but for which the data must be preserved
+
+		std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
+		// Create the Render pass with arguments of the subpasses used and the attachments to refer to.
+		VkRenderPassCreateInfo renderPassInfo = {};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());;
+		renderPassInfo.pAttachments = attachments.data();
+		renderPassInfo.subpassCount = 1;
+		renderPassInfo.pSubpasses = &subpass;
+
+		// Subpass dependecies
+		VkSubpassDependency dependency = {};
+		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependency.dstSubpass = 0;
+		//The first two fields specify the indices of the dependency and the dependent subpass.
+		//The special value VK_SUBPASS_EXTERNAL refers to the implicit subpass before or after the render 
+		//pass depending on whether it is specified in srcSubpass or dstSubpass.The index 0 refers to our
+		//subpass, which is the first and only one.The dstSubpass must always be higher than srcSubpass to 
+		//prevent cycles in the dependency graph
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.srcAccessMask = 0;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		renderPassInfo.dependencyCount = 1;
+		renderPassInfo.pDependencies = &dependency;
+
+		// Here there is a choice for the Allocator function
+		if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create render pass!");
+		}
+	}
+
+	void createTexture(SampledImage& image, std::string imageFile){
+		cv::Mat matImage = loadImage(imageFile);
+
+		createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(),(char*) matImage.data);
+
+		matImage.release();
 	}
 };
 

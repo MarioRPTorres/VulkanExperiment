@@ -2,16 +2,6 @@
 
 //********************** External Functions ****************************
 //**********************************************************************
-cv::Mat loadImage(std::string imagePath) {
-	cv::Mat image = cv::imread(imagePath, cv::IMREAD_COLOR); // do grayscale processing?
-
-	if (image.data == NULL) {
-		throw std::runtime_error("failed to load texture image!");
-	}
-	cv::cvtColor(image, image, cv::COLOR_BGR2RGBA, 4);
-
-	return image;
-}
 
 //**************************** Helper Functions ****************************
 ///// Debug CallBack
@@ -183,28 +173,6 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
 	return requiredExtensions.empty();
 }
 
-VkSurfaceFormatKHR VulkanEngine::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
-	// Choose the formats of the image such as how pixels are organised, the amount of bits per channel
-	for (const auto& availableFormat : availableFormats) {
-		if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-			return availableFormat;
-		}
-	}
-
-	return availableFormats[0];
-}
-
-VkPresentModeKHR VulkanEngine::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
-	// Choose the method of queuing images in the swapchain to the window surface. It differentiates on how to handle
-	// full queue and choosing images from the queue.
-	for (const auto& availablePresentMode : availablePresentModes) {
-		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-			return availablePresentMode;
-		}
-	}
-	return VK_PRESENT_MODE_FIFO_KHR;
-}
-
 //**************************** VulkanEngine ****************************
 //**********************************************************************
 
@@ -274,6 +242,7 @@ void VulkanEngine::createInstance() {
 		throw std::runtime_error("failed to create instance!");
 	}
 }
+
 void VulkanEngine::setupDebugMessenger() {
 	if (!enableValidationLayers) return;
 
@@ -289,6 +258,7 @@ void VulkanEngine::setupDebugMessenger() {
 
 	return;
 }
+
 void VulkanEngine::createSurface() {
 	// Here a Window Surface object is created for Vulkan to interact the window system. The necessary extensions
 	// were already added by the glfwGetRequiredInstanceExtensions call. While the window surface object is agnostic
@@ -309,6 +279,7 @@ void VulkanEngine::createSurface() {
 		throw std::runtime_error("failed to create window surface!");
 	}
 }
+
 #ifdef PHYSICAL_DEVICE_SCORE_SELECTION
 int VulkanEngine::rateDeviceSuitability(VkPhysicalDevice device) {
 	VkPhysicalDeviceProperties deviceProperties;
@@ -339,6 +310,7 @@ int VulkanEngine::rateDeviceSuitability(VkPhysicalDevice device) {
 	return score;
 }
 #endif
+
 SwapChainSupportDetails VulkanEngine::querySwapChainSupport(VkPhysicalDevice device) {
 	SwapChainSupportDetails details;
 
@@ -362,6 +334,7 @@ SwapChainSupportDetails VulkanEngine::querySwapChainSupport(VkPhysicalDevice dev
 
 	return details;
 }
+
 bool VulkanEngine::isDeviceSuitable(VkPhysicalDevice device) {
 	// Checks for Properties and Features supported by the device as well as the QueueFamilies attributes
 	//VkPhysicalDeviceProperties deviceProperties;
@@ -393,6 +366,7 @@ bool VulkanEngine::isDeviceSuitable(VkPhysicalDevice device) {
 
 	return findQueueFamilies(device).isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 }
+
 QueueFamilyIndices VulkanEngine::findQueueFamilies(VkPhysicalDevice device) {
 	QueueFamilyIndices indices;
 	optional transferFamilyIndice;
@@ -442,6 +416,7 @@ QueueFamilyIndices VulkanEngine::findQueueFamilies(VkPhysicalDevice device) {
 
 	return indices;
 }
+
 void VulkanEngine::pickPhysicalDevice() {
 	// List the available graphics card
 	uint32_t deviceCount = 0;
@@ -481,6 +456,7 @@ void VulkanEngine::pickPhysicalDevice() {
 	// Add the multisample anti-aliasing count
 	msaaSamples = getMaxUsableSampleCount();
 }
+
 void VulkanEngine::createLogicalDevice() {
 	// Logical devices don't interact directly with instances
 
@@ -553,6 +529,28 @@ void VulkanEngine::createLogicalDevice() {
 	vkGetDeviceQueue(device, indices.transferFamily.value, 0, &transferQueue);
 }
 
+VkSurfaceFormatKHR VulkanEngine::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+	// Choose the formats of the image such as how pixels are organised, the amount of bits per channel
+	for (const auto& availableFormat : availableFormats) {
+		if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+			return availableFormat;
+		}
+	}
+
+	return availableFormats[0];
+}
+
+VkPresentModeKHR VulkanEngine::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+	// Choose the method of queuing images in the swapchain to the window surface. It differentiates on how to handle
+	// full queue and choosing images from the queue.
+	for (const auto& availablePresentMode : availablePresentModes) {
+		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+			return availablePresentMode;
+		}
+	}
+	return VK_PRESENT_MODE_FIFO_KHR;
+}
+
 VkExtent2D VulkanEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
 	if (capabilities.currentExtent.width != UINT32_MAX) {
 		return capabilities.currentExtent;
@@ -573,6 +571,7 @@ VkExtent2D VulkanEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabi
 		return actualExtent;
 	}
 }
+
 void VulkanEngine::createSwapChain() {
 	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
@@ -652,6 +651,7 @@ void VulkanEngine::createSwapChain() {
 	swapChainExtent = extent;
 
 }
+
 void VulkanEngine::createSwapChainImageViews() {
 	swapChainImageViews.resize(swapChainImages.size());
 
@@ -769,6 +769,39 @@ void VulkanEngine::createRenderPass() {
 	}
 
 }
+
+void VulkanEngine::createDescriptorSetLayout() {
+	// Create a descriptor which is used by the shader to access resources like images and buffers
+	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	// It is possible for the shader variable
+	// to represent an array of uniform buffer objects, and descriptorCount specifies
+	// the number of values in the array.This could be used to specify a transformation
+	// for each of the bones in a skeleton for skeletal animation, for example.
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	// For image sampling related descriptors
+	uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+	VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
+	samplerLayoutBinding.binding = 1;
+	samplerLayoutBinding.descriptorCount = static_cast<uint32_t>(MAX_SAMPLED_IMAGES);
+	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	samplerLayoutBinding.pImmutableSamplers = nullptr;
+	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+	layoutInfo.pBindings = bindings.data();
+
+	if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create descriptor set layout!");
+	}
+}
+
 VkShaderModule VulkanEngine::createShaderModule(const std::vector<char>& code) {
 	VkShaderModuleCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -788,6 +821,7 @@ VkShaderModule VulkanEngine::createShaderModule(const std::vector<char>& code) {
 
 	return shaderModule;
 }
+
 void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag) {
 
 	// Shader modules are only a thin wrapper around the shader bytecode. 
@@ -1069,6 +1103,7 @@ void VulkanEngine::createFramebuffers() {
 		}
 	}
 }
+
 void VulkanEngine::createCommandPool() {
 	QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
@@ -1103,6 +1138,7 @@ void VulkanEngine::createCommandPool() {
 		}
 	}
 }
+
 void VulkanEngine::createCommandBuffers() {
 	commandBuffers.resize(swapChainFramebuffers.size());
 
@@ -1119,6 +1155,7 @@ void VulkanEngine::createCommandBuffers() {
 	}
 
 }
+
 void VulkanEngine::writeCommandBuffers() {
 
 	vkResetCommandPool(device, commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
@@ -1200,6 +1237,7 @@ void VulkanEngine::writeCommandBuffers() {
 		}
 	}
 }
+
 void VulkanEngine::createSyncObjects() {
 	// Create synchronization objects to control the flow of work both on gpu and from cpu to gpu.
 	// The semaphores tell the gpu when to wait to start the action. 
@@ -1226,6 +1264,7 @@ void VulkanEngine::createSyncObjects() {
 		}
 	}
 }
+
 uint32_t VulkanEngine::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
 	VkPhysicalDeviceMemoryProperties memProperties;
 	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
@@ -1237,6 +1276,7 @@ uint32_t VulkanEngine::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags
 
 	throw std::runtime_error("failed to find suitable memory type!");
 }
+
 void VulkanEngine::createVertexBuffer(std::vector<Vertex> vertices) {
 	VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
@@ -1266,6 +1306,7 @@ void VulkanEngine::createVertexBuffer(std::vector<Vertex> vertices) {
 	vkDestroyBuffer(device, stagingBuffer, nullptr);
 	vkFreeMemory(device, stagingBufferMemory, nullptr);
 }
+
 void VulkanEngine::createIndexBuffer(std::vector<uint32_t> indices) {
 	indexCount = static_cast<uint32_t>(indices.size());
 	VkDeviceSize bufferSize = sizeof(indices[0]) * indexCount;
@@ -1291,6 +1332,7 @@ void VulkanEngine::createIndexBuffer(std::vector<uint32_t> indices) {
 	vkDestroyBuffer(device, stagingBuffer, nullptr);
 	vkFreeMemory(device, stagingBufferMemory, nullptr);
 }
+
 void VulkanEngine::createUniformBuffers() {
 	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
@@ -1303,37 +1345,7 @@ void VulkanEngine::createUniformBuffers() {
 			uniformBuffersMemory[i]);
 	}
 }
-void VulkanEngine::createDescriptorSetLayout() {
-	// Create a descriptor which is used by the shader to access resources like images and buffers
-	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
-	uboLayoutBinding.binding = 0;
-	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	// It is possible for the shader variable
-	// to represent an array of uniform buffer objects, and descriptorCount specifies
-	// the number of values in the array.This could be used to specify a transformation
-	// for each of the bones in a skeleton for skeletal animation, for example.
-	uboLayoutBinding.descriptorCount = 1;
-	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-	// For image sampling related descriptors
-	uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
 
-	VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
-	samplerLayoutBinding.binding = 1;
-	samplerLayoutBinding.descriptorCount = static_cast<uint32_t>(MAX_SAMPLED_IMAGES);
-	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	samplerLayoutBinding.pImmutableSamplers = nullptr;
-	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-	layoutInfo.pBindings = bindings.data();
-
-	if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create descriptor set layout!");
-	}
-}
 void VulkanEngine::createDescriptorPool() {
 	std::array<VkDescriptorPoolSize, 2> poolSizes = {};
 	// Pool for uniform buffer
@@ -1359,6 +1371,7 @@ void VulkanEngine::createDescriptorPool() {
 		throw std::runtime_error("failed to create descriptor pool!");
 	}
 }
+
 void VulkanEngine::createDescriptorSets() {
 	std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), descriptorSetLayout);
 	VkDescriptorSetAllocateInfo allocInfo = {};
@@ -1375,6 +1388,7 @@ void VulkanEngine::createDescriptorSets() {
 		}
 	}
 }
+
 void VulkanEngine::createColorResources() {
 	VkFormat colorFormat = swapChainImageFormat;
 
@@ -1388,6 +1402,7 @@ void VulkanEngine::createColorResources() {
 
 	colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 }
+
 VkFormat VulkanEngine::findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
 	// The support of a format depends on the tiling mode and usage
 
@@ -1410,6 +1425,7 @@ VkFormat VulkanEngine::findSupportedFormat(const std::vector<VkFormat>& candidat
 
 	throw std::runtime_error("failed to find supported format!");
 }
+
 VkFormat VulkanEngine::findDepthFormat() {
 	/*
 		• VK_FORMAT_D32_SFLOAT : 32 - bit float for depth
@@ -1422,6 +1438,7 @@ VkFormat VulkanEngine::findDepthFormat() {
 		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
 	);
 }
+
 void VulkanEngine::createDepthResources() {
 
 
@@ -1440,7 +1457,6 @@ void VulkanEngine::createDepthResources() {
 		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 		1);
 }
-
 
 void VulkanEngine::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
@@ -1496,6 +1512,7 @@ void VulkanEngine::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	// for this the vertex buffer, the offset is simply 0. If the offset is non - zero, then it is required to be divisible by memRequirements.alignment
 	vkBindBufferMemory(device, buffer, bufferMemory, 0);
 }
+
 void VulkanEngine::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
 	// To copy between buffer we must submit a command. We're going to create a
 	// temporary command buffer to do so. We can use a separate command pool with the
@@ -1511,6 +1528,7 @@ void VulkanEngine::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSi
 
 	endSingleTimeCommands(commandBuffer);
 }
+
 void VulkanEngine::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
 	VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 	VkBufferImageCopy region = {};
@@ -1550,6 +1568,7 @@ VkCommandBuffer VulkanEngine::beginSingleTimeCommands() {
 	return commandBuffer;
 
 }
+
 void VulkanEngine::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
 	vkEndCommandBuffer(commandBuffer);
 
@@ -1630,6 +1649,7 @@ void VulkanEngine::createImage(uint32_t width, uint32_t height,
 	}
 	vkBindImageMemory(device, image, imageMemory, 0);
 }
+
 VkImageView VulkanEngine::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) {
 	VkImageViewCreateInfo createInfo = {  };
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1654,6 +1674,7 @@ VkImageView VulkanEngine::createImageView(VkImage image, VkFormat format, VkImag
 	}
 	return imageView;
 }
+
 void VulkanEngine::createImageSampler(VkSampler& sampler, uint32_t mipLevels) {
 	// Sampler is a separate object that can be used on any image and doesn't reference the image anywhere
 	VkSamplerCreateInfo samplerInfo = {};
@@ -1703,15 +1724,10 @@ void VulkanEngine::createImageSampler(VkSampler& sampler, uint32_t mipLevels) {
 		throw std::runtime_error("failed to create texture sampler!");
 	}
 }
-void VulkanEngine::createSampledImage(SampledImage& image, std::string imageFile) {
-	int texWidth, texHeight, texChannels;
 
-	cv::Mat matImage = loadImage(imageFile);
-	VkDeviceSize imageSize = matImage.total() * matImage.elemSize();
+void VulkanEngine::createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData) {
+	VkDeviceSize imageSize = rows*cols * elemSize;
 
-	texWidth = matImage.cols;
-	texHeight = matImage.rows;
-	texChannels = 4;
 
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
@@ -1723,15 +1739,13 @@ void VulkanEngine::createSampledImage(SampledImage& image, std::string imageFile
 
 	void* data;
 	vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-	memcpy(data, matImage.data, static_cast<size_t>(imageSize));
+	memcpy(data, imageData, static_cast<size_t>(imageSize));
 	vkUnmapMemory(device, stagingBufferMemory);
-
-	matImage.release();
 
 	mipLevels = 5;
 	createImage(
-		texWidth,
-		texHeight,
+		cols,
+		rows,
 		mipLevels,
 		VK_SAMPLE_COUNT_1_BIT,
 		VK_FORMAT_R8G8B8A8_SRGB,
@@ -1742,9 +1756,9 @@ void VulkanEngine::createSampledImage(SampledImage& image, std::string imageFile
 		image.memory);
 
 	transitionImageLayout(image.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
-	copyBufferToImage(stagingBuffer, image.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+	copyBufferToImage(stagingBuffer, image.image, static_cast<uint32_t>(cols), static_cast<uint32_t>(rows));
 
-	generateMipmaps(image.image, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+	generateMipmaps(image.image, VK_FORMAT_R8G8B8A8_SRGB, cols, rows, mipLevels);
 
 	vkDestroyBuffer(device, stagingBuffer, nullptr);
 	vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -1753,6 +1767,7 @@ void VulkanEngine::createSampledImage(SampledImage& image, std::string imageFile
 
 	createImageSampler(image.sampler, mipLevels);
 }
+
 void VulkanEngine::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
 
 	QueueFamilyIndices ind = findQueueFamilies(physicalDevice);
@@ -1831,6 +1846,7 @@ void VulkanEngine::transitionImageLayout(VkImage image, VkFormat format, VkImage
 	);
 	endSingleTimeCommands(commandBuffer);
 }
+
 void VulkanEngine::generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
 
 	// Check if image format supports linear blitting
@@ -1936,6 +1952,7 @@ void VulkanEngine::generateMipmaps(VkImage image, VkFormat imageFormat, int32_t 
 	endSingleTimeCommands(commandBuffer);
 
 }
+
 VkSampleCountFlagBits VulkanEngine::getMaxUsableSampleCount() {
 	VkPhysicalDeviceProperties physicalDeviceProperties;
 	vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
@@ -1991,9 +2008,6 @@ void VulkanEngine::updateDescriptorSet(std::array<SampledImage, MAX_SAMPLED_IMAG
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 	}
 }
-
-
-
 
 //void VulkanEngine::createTextureImage() {
 //	int texWidth, texHeight, texChannels;

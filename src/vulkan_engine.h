@@ -13,8 +13,6 @@
 #include <cstdint> // Necessary for UINT32_MAX
 #include <algorithm> // For std::max/min
 
-#include <opencv2/opencv.hpp>
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm\glm.hpp>
@@ -23,7 +21,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp> // For Vertex hashing
 
-#include <chrono>
 
 #include <vector>
 #include <array>
@@ -160,6 +157,24 @@ struct SwapChainSupportDetails {
 	std::vector<VkPresentModeKHR> presentModes;
 };
 
+struct VulkanBackEndData {
+	GLFWwindow* window;
+	VkInstance instance;
+	VkPhysicalDevice physicalDevice;
+	VkDevice device;
+	uint32_t graphicsQueueFamily;
+	VkQueue graphicsQueue;
+	VkQueue transientQueue;
+};
+
+struct SwapChainDetails {
+	uint32_t minImageCount;
+	uint32_t imageCount;
+	VkFormat format;
+	VkExtent2D extent;
+	std::vector<VkImageView> imageViews;
+};
+
 // *************** Other Functions *************
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 
@@ -239,8 +254,6 @@ protected:
 	void createLogicalDevice();
 
 
-	void initWindow(int width, int height, void* userPointer, GLFWframebuffersizefun framebufferResizeCallback, GLFWkeyfun key_callback);
-	void initVulkan();
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
@@ -267,7 +280,7 @@ protected:
 	void createDescriptorPool();
 	void createDescriptorSets();
 	void createUniformBuffers();
-	void createSampledImage(SampledImage& image, std::string imageFile);
+	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData);
 	void updateDescriptorSet(std::array<SampledImage, MAX_SAMPLED_IMAGES> images, int groupIndex);
 	void writeCommandBuffers();
 
@@ -279,8 +292,6 @@ protected:
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 	
-	VkCommandBuffer beginSingleTimeCommands();
-	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 	void createImage(uint32_t width, uint32_t height,
 		uint32_t mipLevels, VkSampleCountFlagBits numSamples,
 		VkFormat format,
@@ -297,6 +308,39 @@ protected:
 	VkSampleCountFlagBits getMaxUsableSampleCount();
 
 	void cleanupSampledImage(SampledImage& image);
+
+public:
+	VkCommandBuffer beginSingleTimeCommands();
+	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
+	
+	VulkanBackEndData getBackEndData() {
+		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+		VulkanBackEndData bd = {
+			window,
+			instance,
+			physicalDevice,
+			device,
+			queueFamilyIndices.graphicsFamily.value,
+			graphicsQueue,
+			transferQueue
+		};
+
+		return bd;
+	}
+
+	SwapChainDetails getSwapChainDetails() {
+		SwapChainSupportDetails sc = querySwapChainSupport(physicalDevice);
+		SwapChainDetails details = {
+			sc.capabilities.minImageCount,
+			static_cast<uint32_t> (swapChainImages.size()),
+			swapChainImageFormat,
+			sc.capabilities.currentExtent,
+			swapChainImageViews
+		};
+
+		return details;
+	}
+
 };
 
 #endif
