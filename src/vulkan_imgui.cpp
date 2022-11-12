@@ -1,9 +1,9 @@
 #include "vulkan_imgui.h"
 
 // Forward Declarations
-void createImguiRenderPass(VkDevice device, VkFormat format, VkRenderPass& renderPass);
-void createImguiCommandBuffers(VkDevice device, uint32_t swapChainImageCount, VulkanImguiDeviceObjects& imObj);
-void createImguiFrameBuffers(VkDevice device, SwapChainDetails sc, VulkanImguiDeviceObjects& imObj);
+void createImguiRenderPass(VkDevice device, VkFormat format, VkRenderPass& renderPass,bool firstPass);
+void createImguiCommandBuffers(VkDevice device, uint32_t swapChainImageCount, VulkanImgui_DeviceObjects& imObj);
+void createImguiFrameBuffers(VkDevice device, SwapChainDetails sc, VulkanImgui_DeviceObjects& imObj);
 
 void check_vk_result(VkResult err)
 {
@@ -14,7 +14,7 @@ void check_vk_result(VkResult err)
 		abort();
 }
 
-void initImgui(VulkanEngine* vk,VulkanImguiDeviceObjects& imObj) {
+void initImgui(VulkanEngine* vk,VulkanImgui_DeviceObjects& imObj) {
 	VulkanBackEndData bd = vk->getBackEndData();
 	SwapChainDetails sc = vk->getSwapChainDetails();
 	// Setup Dear ImGui context
@@ -62,7 +62,7 @@ void initImgui(VulkanEngine* vk,VulkanImguiDeviceObjects& imObj) {
 	vk->endSingleTimeCommands(command_buffer);
 }
 
-void createImguiDeviceObjects(VulkanEngine* vk, VulkanImguiDeviceObjects& imObj) {
+void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj, VulkanImgui_DeviceObjectsInfo info) {
 	VulkanBackEndData bd = vk->getBackEndData();
 	SwapChainDetails sc = vk->getSwapChainDetails();
 
@@ -114,22 +114,22 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImguiDeviceObjects& imObj)
 	}
 
 	createImguiCommandBuffers(bd.device, sc.imageCount, imObj);
-	createImguiRenderPass(bd.device, sc.format, imObj.renderPass);
+	createImguiRenderPass(bd.device, sc.format, imObj.renderPass,info.firstPass);
 	createImguiFrameBuffers(bd.device, sc, imObj);
 }
 
-void createImguiRenderPass(VkDevice device, VkFormat format, VkRenderPass& renderPass) {
+void createImguiRenderPass(VkDevice device, VkFormat format, VkRenderPass& renderPass,bool firstPass) {
 	
 	// ****************  Imgui Render Pass **************
 	// Color Attachment creation
 	VkAttachmentDescription imguiColorAttachment = {};
 	imguiColorAttachment.format = format;
-	imguiColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // msaa is already resolved in previous renderpass and imgui doesn't need it
-	imguiColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // We want to keep what is already in the framebuffers and draw over it the imgui widgets
+	imguiColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // msaa can be resolved in previous renderpass and imgui doesn't need it
+	imguiColorAttachment.loadOp = (firstPass ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD); // Whether we want to keep what is already in the framebuffers and draw over it the imgui widgets
 	imguiColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	imguiColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	imguiColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	imguiColorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	imguiColorAttachment.initialLayout = (firstPass ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	imguiColorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 	// Reference to point to the attachment in the attachment array
@@ -168,7 +168,7 @@ void createImguiRenderPass(VkDevice device, VkFormat format, VkRenderPass& rende
 	}
 }
 
-void createImguiCommandBuffers(VkDevice device, uint32_t swapChainImageCount, VulkanImguiDeviceObjects& imObj) {
+void createImguiCommandBuffers(VkDevice device, uint32_t swapChainImageCount, VulkanImgui_DeviceObjects& imObj) {
 	// **************** Command Buffers ************************
 
 	imObj.commandBuffers.resize(swapChainImageCount);
@@ -185,7 +185,7 @@ void createImguiCommandBuffers(VkDevice device, uint32_t swapChainImageCount, Vu
 	}
 }
 
-void createImguiFrameBuffers(VkDevice device, SwapChainDetails sc,VulkanImguiDeviceObjects& imObj) {
+void createImguiFrameBuffers(VkDevice device, SwapChainDetails sc,VulkanImgui_DeviceObjects& imObj) {
 	uint32_t imageCount = static_cast<uint32_t>(sc.imageViews.size());
 	imObj.frameBuffers.resize(imageCount);
 
@@ -208,7 +208,7 @@ void createImguiFrameBuffers(VkDevice device, SwapChainDetails sc,VulkanImguiDev
 	}
 }
 
-void cleanupImguiObjects(VkDevice device, VulkanImguiDeviceObjects& imObj) {
+void cleanupImguiObjects(VkDevice device, VulkanImgui_DeviceObjects& imObj) {
 
 	// Resources to destroy when the program ends
 	vkDestroyDescriptorPool(device, imObj.descriptorPool, nullptr);
@@ -218,7 +218,7 @@ void cleanupImguiObjects(VkDevice device, VulkanImguiDeviceObjects& imObj) {
 	ImGui::DestroyContext();
 }
 
-void cleanupImguiSwapChainObjects(VkDevice device, VulkanImguiDeviceObjects& imObj) {
+void cleanupImguiSwapChainObjects(VkDevice device, VulkanImgui_DeviceObjects& imObj) {
 	for (size_t i = 0; i < imObj.frameBuffers.size(); i++) {
 		vkDestroyFramebuffer(device, imObj.frameBuffers[i], nullptr);
 	}
@@ -226,12 +226,12 @@ void cleanupImguiSwapChainObjects(VkDevice device, VulkanImguiDeviceObjects& imO
 	vkDestroyRenderPass(device, imObj.renderPass, nullptr);
 }
 
-void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImguiDeviceObjects& imObj) {
+void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj, VulkanImgui_DeviceObjectsInfo info) {
 	VulkanBackEndData bd = vk->getBackEndData();
 	SwapChainDetails sc = vk->getSwapChainDetails();
 	
 	ImGui_ImplVulkan_SetMinImageCount(sc.minImageCount);
 	createImguiCommandBuffers(bd.device, sc.imageCount, imObj);
-	createImguiRenderPass(bd.device, sc.format, imObj.renderPass);
+	createImguiRenderPass(bd.device, sc.format, imObj.renderPass, info.firstPass);
 	createImguiFrameBuffers(bd.device, sc, imObj);
 }

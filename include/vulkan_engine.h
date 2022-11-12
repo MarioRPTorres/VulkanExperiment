@@ -26,8 +26,6 @@
 #include <array>
 #include <set>
 
-#define PHYSICAL_DEVICE_SCORE_SELECTION
-
 #ifdef PHYSICAL_DEVICE_SCORE_SELECTION
 #include <map>
 #endif

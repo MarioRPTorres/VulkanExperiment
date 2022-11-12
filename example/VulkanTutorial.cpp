@@ -12,6 +12,12 @@
 #include <tiny_obj_loader.h>
 #include <unordered_map> // To load the models 
 
+#ifdef IMGUI_EXT
+const bool enableImgui = true;
+#else
+const bool enableImgui = false;
+#endif
+
 /*
 Future Feature:
 • Push constants
@@ -23,7 +29,6 @@ Future Feature:
 • Multiple subpasses
 • Compute shaders
 */
-typedef std::vector<char> shaderCode;
 
 const int WIDTH = 640;
 const int HEIGHT = 480;
@@ -46,8 +51,6 @@ void imguiBuildUI() {
 	ImGui::ShowDemoWindow();
 	ImGui::Render();
 }
-
-
 
 void compileShaders() {
 	// TO DO: Add dynamic location of vulkan installation 
@@ -155,7 +158,9 @@ private:
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
-	VulkanImguiDeviceObjects imguiObjects;
+	VulkanImgui_DeviceObjects imguiObjects;
+	VulkanImgui_DeviceObjectsInfo imguiInfo = { false };
+
 	uint32_t imageIndex;
 	bool swapChainOutdated = false;
 
@@ -192,7 +197,7 @@ private:
 		createSwapChain();
 		createSwapChainImageViews();
 		if (enableImgui) {
-			createImguiDeviceObjects((VulkanEngine*)this, imguiObjects);
+			createImguiDeviceObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
 		} 
 		createRenderPass();
 		createDescriptorSetLayout();
@@ -369,7 +374,7 @@ private:
 		createCommandBuffers();
 		writeCommandBuffers();
 		if (enableImgui) {
-			recreateImguiSwapChainObjects((VulkanEngine*)this, imguiObjects);
+			recreateImguiSwapChainObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
 		}
 	}
 
