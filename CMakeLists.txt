@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 # Build Settings 
 set(BUILD_MAIN_EXAMPLE TRUE)
-set(BUILD_EXTRA_EXAMPLES TRUE)
+set(BUILD_EXTRA_EXAMPLES FALSE)
  
 # Set Target Name
 set(PROJECT_TARGET VulkanEngine)
@@ -31,6 +31,16 @@ set_property(TARGET ${IMGUI_TARGET} PROPERTY CXX_STANDARD 11)
 target_include_directories(${PROJECT_TARGET} PUBLIC "./include" )
 target_include_directories(${IMGUI_TARGET} PUBLIC "./include" )
 
+set_target_properties(${PROJECT_TARGET} PROPERTIES
+  # "current version" in semantic format in Mach-O binary file
+  VERSION 1.0.0-alpha
+  PUBLIC_HEADER "include/vulkan_engine.h"
+)
+set_target_properties(${IMGUI_TARGET} PROPERTIES
+  # "current version" in semantic format in Mach-O binary file
+  VERSION 1.0.0-alpha
+  PUBLIC_HEADER "include/vulkan_imgui.h"
+)
 #======================================  Libraries =================================
 # Add libs
 # add_subdirectory("libs")
@@ -54,7 +64,11 @@ add_subdirectory(".\\libs\\glfw-3.3.7")
 #=================== Vulkan ===================
 # Needs system varialble for the Vulkan path VK_SDK_PATH defined (or VULKAN_SDK)
 find_package(Vulkan REQUIRED)
-
+if (NOT Vulkan_FOUND)
+    message( FATAL_ERROR "Vulkan package not found. Try setting VK_SDK_PATH or VULKAN_SDK system variable" )
+    return()
+endif()
+message( STATUS "Vulkan glslc executable: ${Vulkan_GLSLC_EXECUTABLE}" )
 #=================== IMGUI ===================
 # Dear Imgui Library Docking WIP 1.88
 set(IMGUI_DIR ".\\libs\\imgui")
@@ -84,6 +98,13 @@ target_link_libraries(IMGUI PRIVATE glfw "Vulkan::Vulkan")
 
 target_link_libraries(${PROJECT_TARGET} PUBLIC glm::glm glfw "Vulkan::Vulkan")
 target_link_libraries(${IMGUI_TARGET} PRIVATE IMGUI ${PROJECT_TARGET})
+
+install(TARGETS ${PROJECT_TARGET} ${IMGUI_TARGET} 
+        PUBLIC_HEADER
+            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)
+
+install(FILES "resources/CMakeLists.txt" DESTINATION ${CMAKE_INSTALL_PREFIX} )
 
 #======================= Examples =========================
 
@@ -132,6 +153,7 @@ function(configureExampleTarget EXAMPLE_TARGET SCORE_SELECTION USE_IMGUI)
         target_link_libraries(${EXAMPLE_TARGET} PRIVATE ${IMGUI_TARGET} IMGUI)
     endif()
 
+    target_compile_definitions(${EXAMPLE_TARGET} PRIVATE Vulkan_GLSLC_EXECUTABLE=${Vulkan_GLSLC_EXECUTABLE})
     # Include directories
     target_include_directories(${EXAMPLE_TARGET} PUBLIC "./include" )
     # Include loaded libraries 
@@ -150,21 +172,21 @@ function(configureExampleTarget EXAMPLE_TARGET SCORE_SELECTION USE_IMGUI)
     ADD_CUSTOM_COMMAND(TARGET ${EXAMPLE_TARGET}
               POST_BUILD
               #COMMAND cmake_path  command_Mode command 
-              COMMAND ${CMAKE_COMMAND} -E make_directory   $<TARGET_FILE_DIR:${EXAMPLE_TARGET}>/resources 
+              COMMAND ${CMAKE_COMMAND} -E make_directory   $<TARGET_FILE_DIR:${EXAMPLE_TARGET}>/shaders 
               COMMAND ${CMAKE_COMMAND} -E make_directory   $<TARGET_FILE_DIR:${EXAMPLE_TARGET}>/textures 
               COMMAND ${CMAKE_COMMAND} -E make_directory   $<TARGET_FILE_DIR:${EXAMPLE_TARGET}>/models 
     )
 
     ## ------------
-    # Get all resource files added from subdirectory resources
-    FILE(GLOB resourcesFiles "${CMAKE_CURRENT_SOURCE_DIR}/resources/*")
-    message(STATUS "Resource files to copy: ${resourcesFiles}")
+    # Get all shaders files added from subdirectory shaders
+    FILE(GLOB shadersFiles "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*")
+    message(STATUS "Resource files to copy: ${shadersFiles}")
 
-    foreach(rFile ${resourcesFiles})
+    foreach(rFile ${shadersFiles})
     ADD_CUSTOM_COMMAND(TARGET ${EXAMPLE_TARGET}
               POST_BUILD
               #COMMAND cmake_path  command_Mode command 
-              COMMAND ${CMAKE_COMMAND} -E copy ${rFile} $<TARGET_FILE_DIR:${EXAMPLE_TARGET}>/resources
+              COMMAND ${CMAKE_COMMAND} -E copy ${rFile} $<TARGET_FILE_DIR:${EXAMPLE_TARGET}>/shaders
     )
     endforeach()
 
@@ -179,7 +201,7 @@ function(configureExampleTarget EXAMPLE_TARGET SCORE_SELECTION USE_IMGUI)
     endforeach()
 
     ## ------------
-    # Get all texture files added from subdirectory resources
+    # Get all texture files added from subdirectory textures
     FILE(GLOB textureFiles "${CMAKE_CURRENT_SOURCE_DIR}/textures/*")
     message(STATUS "Texture files to copy: ${textureFiles}")
 
@@ -192,7 +214,7 @@ function(configureExampleTarget EXAMPLE_TARGET SCORE_SELECTION USE_IMGUI)
     endforeach()
 
     ## ------------
-    # Get all model files added from subdirectory resources
+    # Get all model files added from subdirectory models
     FILE(GLOB modelFiles "${CMAKE_CURRENT_SOURCE_DIR}/models/*")
     message(STATUS "Model files to copy: ${modelFiles}")
 

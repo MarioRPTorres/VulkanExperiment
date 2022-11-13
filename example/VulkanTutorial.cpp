@@ -18,6 +18,9 @@ const bool enableImgui = true;
 const bool enableImgui = false;
 #endif
 
+#define QUDI(x) #x
+#define STRING(x) QUDI(x)
+
 /*
 Future Feature:
 • Push constants
@@ -54,8 +57,10 @@ void imguiBuildUI() {
 
 void compileShaders() {
 	// TO DO: Add dynamic location of vulkan installation 
-	system("C:/.local/VulkanSDK-1.3.204/Bin/glslc ./resources/shader.vert -o ./vert.spv");
-	system("C:/.local/VulkanSDK-1.3.204/Bin/glslc ./resources/shader.frag -o ./frag.spv");
+	std::string vulkan_glslc_path = STRING(Vulkan_GLSLC_EXECUTABLE);
+	system((vulkan_glslc_path + " ./shaders/shader.vert -o ./vert.spv").c_str());
+
+	system((vulkan_glslc_path + " ./shaders/shader.frag -o ./frag.spv").c_str());
 }
 
 namespace std {

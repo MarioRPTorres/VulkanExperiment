@@ -8,6 +8,7 @@
 
 # Build Directory
 build/
+install/
 out/
 textures/
 models/
