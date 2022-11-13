@@ -34,7 +34,7 @@ target_include_directories(${IMGUI_TARGET} PUBLIC "./include" )
 set_target_properties(${PROJECT_TARGET} PROPERTIES
   # "current version" in semantic format in Mach-O binary file
   VERSION 1.0.0-alpha
-  PUBLIC_HEADER "include/vulkan_engine.h"
+  PUBLIC_HEADER "include/vulkan_engine.h;include/vulkan_descriptors.h;include/vulkan_vertices.h"
 )
 set_target_properties(${IMGUI_TARGET} PROPERTIES
   # "current version" in semantic format in Mach-O binary file
