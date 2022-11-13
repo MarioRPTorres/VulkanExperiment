@@ -1218,18 +1218,7 @@ void VulkanEngine::createIndexBuffer(std::vector<uint32_t> indices) {
 	vkFreeMemory(device, stagingBufferMemory, nullptr);
 }
 
-void VulkanEngine::createUniformBuffers() {
-	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
-	uniformBuffers.resize(swapChainImages.size());
-	uniformBuffersMemory.resize(swapChainImages.size());
-
-	for (size_t i = 0; i < swapChainImages.size(); i++) {
-		createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i],
-			uniformBuffersMemory[i]);
-	}
-}
 
 void VulkanEngine::createDescriptorPool() {
 	std::array<VkDescriptorPoolSize, 2> poolSizes = {};
@@ -1866,47 +1855,6 @@ VkSampleCountFlagBits VulkanEngine::getMaxUsableSampleCount() {
 	if (counts & VK_SAMPLE_COUNT_4_BIT) return VK_SAMPLE_COUNT_4_BIT;
 	if (counts & VK_SAMPLE_COUNT_2_BIT) return VK_SAMPLE_COUNT_2_BIT;
 	return VK_SAMPLE_COUNT_1_BIT;
-}
-
-void VulkanEngine::updateDescriptorSet(std::array<SampledImage, MAX_SAMPLED_IMAGES> images, int groupIndex) {
-
-
-	std::vector<VkDescriptorSet>& descriptorSet = descriptorSets[groupIndex];
-	for (size_t i = 0; i < swapChainImages.size(); i++) {
-		VkDescriptorBufferInfo bufferInfo = {};
-		bufferInfo.buffer = uniformBuffers[i];
-		bufferInfo.offset = 0;
-		bufferInfo.range = sizeof(UniformBufferObject);
-
-		std::array<VkDescriptorImageInfo, MAX_SAMPLED_IMAGES> imagesInfo;
-		for (size_t j = 0; j < MAX_SAMPLED_IMAGES; j++) {
-			imagesInfo[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imagesInfo[j].imageView = images[j].view;
-			imagesInfo[j].sampler = images[j].sampler;
-		}
-
-		std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
-
-		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[0].dstSet = descriptorSet[i];
-		descriptorWrites[0].dstBinding = 0;
-		descriptorWrites[0].dstArrayElement = 0;
-		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptorWrites[0].descriptorCount = 1;
-		descriptorWrites[0].pBufferInfo = &bufferInfo;
-		descriptorWrites[0].pImageInfo = nullptr; // Optional
-		descriptorWrites[0].pTexelBufferView = nullptr; // Optional
-
-		descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[1].dstSet = descriptorSet[i];
-		descriptorWrites[1].dstBinding = 1;
-		descriptorWrites[1].dstArrayElement = 0;
-		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		descriptorWrites[1].descriptorCount = static_cast<uint32_t>(imagesInfo.size());
-		descriptorWrites[1].pImageInfo = imagesInfo.data();
-
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-	}
 }
 
 //void VulkanEngine::createTextureImage() {

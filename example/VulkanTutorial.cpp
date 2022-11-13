@@ -1,5 +1,6 @@
 #include "vulkan_engine.h"
 #include "vulkan_vertices.h"
+#include "vulkan_descriptors.h"
 #include "vulkan_imgui.h"
 #include "glfwInteraction.h"
 #include "importResources.h"
@@ -40,7 +41,7 @@ Future Feature:
 const int WIDTH = 640;
 const int HEIGHT = 480;
 
-extern glm::vec3 cameraEye;
+extern float cameraEye[3];
 
 const std::string MODEL_PATH = "models/cottage_obj.obj";
 const std::string TEXTURE_PATH = "textures/texture_1.png";
@@ -164,7 +165,7 @@ private:
 	shaderCode vert;
 	shaderCode frag;
 	BufferBundle vertexBuffer;
-
+	std::vector<BufferBundle> uniformBuffers;
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
@@ -341,8 +342,7 @@ private:
 		vkDestroySwapchainKHR(device, swapChain, nullptr);
 
 		for (size_t i = 0; i < swapChainImages.size(); i++) {
-			vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-			vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+			destroyBufferBundle(uniformBuffers[i]);
 		}
 
 		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
@@ -387,6 +387,18 @@ private:
 		}
 	}
 
+	void createUniformBuffers() {
+		VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+		uniformBuffers.resize(swapChainImages.size());
+
+		for (size_t i = 0; i < swapChainImages.size(); i++) {
+			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i].buffer,
+				uniformBuffers[i].memory);
+		}
+	}
+
 	void updateUniformBuffer(uint32_t currentImage) {
 		auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
@@ -401,15 +413,56 @@ private:
 		//ubo.model[3][0] = 1.0f;
 		//ubo.model[3][1] = 1.0f;
 		//ubo.model[3][2] = 0.0f;
-		ubo.view = glm::lookAt(cameraEye, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+		ubo.view = glm::lookAt(glm::vec3(cameraEye[0], cameraEye[1], cameraEye[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 		ubo.proj = glm::perspective(glm::radians(60.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 60.0f);
 		ubo.proj[1][1] *= -1;
 
 		void* data;
-		vkMapMemory(device, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+		vkMapMemory(device, uniformBuffers[currentImage].memory, 0, sizeof(ubo), 0, &data);
 		memcpy(data, &ubo, sizeof(ubo));
-		vkUnmapMemory(device, uniformBuffersMemory[currentImage]);
+		vkUnmapMemory(device, uniformBuffers[currentImage].memory);
 
+	}
+
+	void updateDescriptorSet(std::array<SampledImage, MAX_SAMPLED_IMAGES> images, int groupIndex) {
+
+
+		std::vector<VkDescriptorSet>& descriptorSet = descriptorSets[groupIndex];
+		for (size_t i = 0; i < swapChainImages.size(); i++) {
+			VkDescriptorBufferInfo bufferInfo = {};
+			bufferInfo.buffer = uniformBuffers[i].buffer;
+			bufferInfo.offset = 0;
+			bufferInfo.range = sizeof(UniformBufferObject);
+
+			std::array<VkDescriptorImageInfo, MAX_SAMPLED_IMAGES> imagesInfo;
+			for (size_t j = 0; j < MAX_SAMPLED_IMAGES; j++) {
+				imagesInfo[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				imagesInfo[j].imageView = images[j].view;
+				imagesInfo[j].sampler = images[j].sampler;
+			}
+
+			std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+
+			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[0].dstSet = descriptorSet[i];
+			descriptorWrites[0].dstBinding = 0;
+			descriptorWrites[0].dstArrayElement = 0;
+			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrites[0].descriptorCount = 1;
+			descriptorWrites[0].pBufferInfo = &bufferInfo;
+			descriptorWrites[0].pImageInfo = nullptr; // Optional
+			descriptorWrites[0].pTexelBufferView = nullptr; // Optional
+
+			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[1].dstSet = descriptorSet[i];
+			descriptorWrites[1].dstBinding = 1;
+			descriptorWrites[1].dstArrayElement = 0;
+			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[1].descriptorCount = static_cast<uint32_t>(imagesInfo.size());
+			descriptorWrites[1].pImageInfo = imagesInfo.data();
+
+			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+		}
 	}
 
 	void drawFrame() {

@@ -13,12 +13,6 @@
 #include <cstdint> // Necessary for UINT32_MAX
 #include <algorithm> // For std::max/min
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm\glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
 
 #include <vector>
 #include <array>
@@ -61,12 +55,6 @@ typedef struct _SampledImage {
 	VkSampler sampler = VK_NULL_HANDLE;
 } SampledImage;
 
-
-struct UniformBufferObject {
-	alignas(16) glm::mat4 model;
-	alignas(16) glm::mat4 view;
-	alignas(16) glm::mat4 proj;
-};
 
 struct optional {
 	uint32_t value;
@@ -188,8 +176,6 @@ protected:
 	VkDeviceMemory indexBufferMemory;
 	uint32_t indexCount = 0;
 
-	std::vector<VkBuffer> uniformBuffers;
-	std::vector<VkDeviceMemory> uniformBuffersMemory;
 	uint32_t mipLevels;
 	bool framebufferResized = false;
 
