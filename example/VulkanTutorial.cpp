@@ -2,6 +2,9 @@
 #include "glfwInteraction.h"
 #include "importResources.h"
 #include "vulkan_imgui.h"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
 #include <opencv2/opencv.hpp>
 #include <chrono>
 #include <map>

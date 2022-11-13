@@ -1,4 +1,7 @@
 #include "vulkan_imgui.h"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
 
 // Forward Declarations
 void createImguiRenderPass(VkDevice device, VkFormat format, VkRenderPass& renderPass,bool firstPass);

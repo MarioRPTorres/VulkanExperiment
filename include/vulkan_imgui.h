@@ -1,8 +1,5 @@
 #ifndef IMGUI_VULKAN_H
 #define IMGUI_VULKAN_H
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_vulkan.h"
 #include "vulkan_engine.h"
 
 
