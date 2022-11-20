@@ -1857,6 +1857,11 @@ VkSampleCountFlagBits VulkanEngine::getMaxUsableSampleCount() {
 	return VK_SAMPLE_COUNT_1_BIT;
 }
 
+void VulkanEngine::freeDescriptorSet(VkDescriptorPool pool,VkDescriptorSet& set) {
+	vkFreeDescriptorSets(device, pool, 1, &set);
+	set = VK_NULL_HANDLE;
+};
+
 //void VulkanEngine::createTextureImage() {
 //	int texWidth, texHeight, texChannels;
 //

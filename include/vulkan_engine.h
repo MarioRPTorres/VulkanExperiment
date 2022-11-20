@@ -217,9 +217,6 @@ protected:
 	// Descriptors
 	void createDescriptorPool();
 	void createDescriptorSets();
-	void createUniformBuffers();
-	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData);
-	void updateDescriptorSet(std::array<SampledImage, MAX_SAMPLED_IMAGES> images, int groupIndex);
 	
 
 	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
@@ -240,9 +237,11 @@ protected:
 	VkFormat findDepthFormat();
 	VkSampleCountFlagBits getMaxUsableSampleCount();
 
-	void cleanupSampledImage(SampledImage& image);
 
 public:
+	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
+	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData);
+	void cleanupSampledImage(SampledImage& image);
 	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
 	void destroyBufferBundle(BufferBundle buffer);
 	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,

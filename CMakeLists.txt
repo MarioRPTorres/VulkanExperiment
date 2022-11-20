@@ -154,7 +154,7 @@ function(configureExampleTarget EXAMPLE_TARGET SCORE_SELECTION USE_IMGUI)
         target_link_libraries(${EXAMPLE_TARGET} PRIVATE ${IMGUI_TARGET} IMGUI)
     endif()
 
-    target_compile_definitions(${EXAMPLE_TARGET} PRIVATE Vulkan_GLSLC_EXECUTABLE=${Vulkan_GLSLC_EXECUTABLE})
+    target_compile_definitions(${EXAMPLE_TARGET} PRIVATE INCLUDE_GLM Vulkan_GLSLC_EXECUTABLE=${Vulkan_GLSLC_EXECUTABLE})
     # Include directories
     target_include_directories(${EXAMPLE_TARGET} PUBLIC "./include" )
     # Include loaded libraries 
