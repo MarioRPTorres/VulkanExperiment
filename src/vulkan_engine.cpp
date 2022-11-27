@@ -822,7 +822,7 @@ VkShaderModule VulkanEngine::createShaderModule(const std::vector<char>& code) {
 	return shaderModule;
 }
 
-void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag) {
+void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag, vertexDescriptions vertex) {
 
 	// Shader modules are only a thin wrapper around the shader bytecode. 
 	// As soon as the graphics pipeline is created the shader modules are no longer needed
@@ -857,9 +857,6 @@ void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag) {
 	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,fragShaderStageInfo };
 
 
-	auto bindingDescription = Vertex::getBindingDescription();
-	auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
 	// Prebuilt Fixed Functions Stage
 	// Vertex Input
 	// This stage tells how to load the vertex data and describes the format of the atributes as well spacing 
@@ -867,9 +864,9 @@ void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag) {
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-	vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-	vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+	vertexInputInfo.pVertexBindingDescriptions = &vertex.binding;
+	vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex.attributes.size());
+	vertexInputInfo.pVertexAttributeDescriptions = vertex.attributes.data();
 
 
 	// Input Assembly
@@ -1156,88 +1153,6 @@ void VulkanEngine::createCommandBuffers() {
 
 }
 
-void VulkanEngine::writeCommandBuffers() {
-
-	vkResetCommandPool(device, commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
-	for (size_t i = 0; i < commandBuffers.size(); i++) {
-
-		VkCommandBufferBeginInfo beginInfo = {};
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		//• VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT : The command buffer will be rerecorded right after 
-		//	executing it once.
-		//• VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : This is a secondary command buffer that will be 
-		//	entirely within a single render pass.
-		//• VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also 
-		//	already pending execution.
-		beginInfo.flags = 0; // OPtional
-		//  The pInheritanceInfo parameter is only relevant for secondary command
-		//	buffers.It specifies which state to inherit from the calling primary command
-		//	buffers.
-		beginInfo.pInheritanceInfo = nullptr; // Optional
-
-		if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
-			throw std::runtime_error("failed to begin recording command buffer!");
-		}
-
-		VkRenderPassBeginInfo renderPassInfo = {};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = renderPass;
-		renderPassInfo.framebuffer = swapChainFramebuffers[i];
-		renderPassInfo.renderArea.offset = { 0,0 };
-		renderPassInfo.renderArea.extent = swapChainExtent;
-
-		std::array<VkClearValue, 2> clearValues = {};
-		clearValues[0].color = { 0.0f,0.0f,0.0f,1.0f };
-		clearValues[1].depthStencil = { 1.0f, 0 };
-
-		//Note that the order of clearValues should be identical to the order of your attachments in the subpass. 
-		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-		renderPassInfo.pClearValues = clearValues.data();
-
-		//All of the functions that record commands can be recognized by their vkCmd prefix.
-
-		//• VK_SUBPASS_CONTENTS_INLINE : The render pass commands will be embedded in the primary command 
-		//	buffer itself and no secondary command buffers will be executed.
-		//• VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : The render pass commands will be executed
-		//	from secondary command buffers.
-		vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-		vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-
-		//• vertexCount : Even though we don’t have a vertex buffer, we technically
-		//	still have 3 vertices to draw.
-		//• instanceCount : Used for instanced rendering, use 1 if you’re not doing
-		//	that.
-		//• firstVertex : Used as an offset into the vertex buffer, defines the lowest
-		//	value of gl_VertexIndex.
-		//• firstInstance : Used as an offset for instanced rendering, defines the
-		//	lowest value of gl_InstanceIndex.
-		//vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
-		// EDIT: The previous commented was for a hard coded vertices in the shader. The application now allocates a vertex buffer outside
-		// and copys the vertices data from the application to the buffer
-
-		VkBuffer vertexBuffers[] = { vertexBuffer };
-		VkDeviceSize offsets[] = { 0 };
-		vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
-		// We can only have a single index buffer.
-		vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-		// Descriptor Set bindings.ffs
-		vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &(descriptorSets[descriptorGroup][i]), 0, nullptr);
-		// Draw Vertex
-		//vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
-		// Indexed Vertex Draw
-		vkCmdDrawIndexed(commandBuffers[i], indexCount, 1, 0, 0, 0);
-
-
-		vkCmdEndRenderPass(commandBuffers[i]);
-
-		if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
-			throw std::runtime_error("failed to record command buffer!");
-		}
-	}
-}
-
 void VulkanEngine::createSyncObjects() {
 	// Create synchronization objects to control the flow of work both on gpu and from cpu to gpu.
 	// The semaphores tell the gpu when to wait to start the action. 
@@ -1277,36 +1192,6 @@ uint32_t VulkanEngine::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags
 	throw std::runtime_error("failed to find suitable memory type!");
 }
 
-void VulkanEngine::createVertexBuffer(std::vector<Vertex> vertices) {
-	VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-	// Create a host visible buffer
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingBufferMemory;
-	createBuffer(bufferSize,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		stagingBuffer,
-		stagingBufferMemory);
-
-	// To copy the vertices data to the allocated memory we need query a pointer to copy
-	void* data;
-	// Map the memory allocated to a CPU accessible memory
-	vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-	// Copy the vertices data
-	memcpy(data, vertices.data(), (size_t)bufferSize);
-	vkUnmapMemory(device, stagingBufferMemory);
-
-	createBuffer(bufferSize,
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer,
-		vertexBufferMemory);
-	copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-	vkDestroyBuffer(device, stagingBuffer, nullptr);
-	vkFreeMemory(device, stagingBufferMemory, nullptr);
-}
-
 void VulkanEngine::createIndexBuffer(std::vector<uint32_t> indices) {
 	indexCount = static_cast<uint32_t>(indices.size());
 	VkDeviceSize bufferSize = sizeof(indices[0]) * indexCount;
@@ -1333,18 +1218,7 @@ void VulkanEngine::createIndexBuffer(std::vector<uint32_t> indices) {
 	vkFreeMemory(device, stagingBufferMemory, nullptr);
 }
 
-void VulkanEngine::createUniformBuffers() {
-	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
-	uniformBuffers.resize(swapChainImages.size());
-	uniformBuffersMemory.resize(swapChainImages.size());
-
-	for (size_t i = 0; i < swapChainImages.size(); i++) {
-		createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i],
-			uniformBuffersMemory[i]);
-	}
-}
 
 void VulkanEngine::createDescriptorPool() {
 	std::array<VkDescriptorPoolSize, 2> poolSizes = {};
@@ -1512,6 +1386,21 @@ void VulkanEngine::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	// for this the vertex buffer, the offset is simply 0. If the offset is non - zero, then it is required to be divisible by memRequirements.alignment
 	vkBindBufferMemory(device, buffer, bufferMemory, 0);
 }
+
+void VulkanEngine::mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen) {
+	// To copy the vertices data to the allocated memory we need query a pointer to copy
+	void* bufferData;
+	// Map the memory allocated to a CPU accessible memory
+	vkMapMemory(device, bufferMemory, 0, datalen, 0, &bufferData);
+	// Copy the vertices data
+	memcpy(bufferData, data, (size_t)datalen);
+	vkUnmapMemory(device, bufferMemory);
+}
+
+void VulkanEngine::destroyBufferBundle(BufferBundle buffer) {
+	vkDestroyBuffer(device, buffer.buffer, nullptr);
+	vkFreeMemory(device, buffer.memory, nullptr);
+};
 
 void VulkanEngine::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
 	// To copy between buffer we must submit a command. We're going to create a
@@ -1968,46 +1857,10 @@ VkSampleCountFlagBits VulkanEngine::getMaxUsableSampleCount() {
 	return VK_SAMPLE_COUNT_1_BIT;
 }
 
-void VulkanEngine::updateDescriptorSet(std::array<SampledImage, MAX_SAMPLED_IMAGES> images, int groupIndex) {
-
-
-	std::vector<VkDescriptorSet>& descriptorSet = descriptorSets[groupIndex];
-	for (size_t i = 0; i < swapChainImages.size(); i++) {
-		VkDescriptorBufferInfo bufferInfo = {};
-		bufferInfo.buffer = uniformBuffers[i];
-		bufferInfo.offset = 0;
-		bufferInfo.range = sizeof(UniformBufferObject);
-
-		std::array<VkDescriptorImageInfo, MAX_SAMPLED_IMAGES> imagesInfo;
-		for (size_t j = 0; j < MAX_SAMPLED_IMAGES; j++) {
-			imagesInfo[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imagesInfo[j].imageView = images[j].view;
-			imagesInfo[j].sampler = images[j].sampler;
-		}
-
-		std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
-
-		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[0].dstSet = descriptorSet[i];
-		descriptorWrites[0].dstBinding = 0;
-		descriptorWrites[0].dstArrayElement = 0;
-		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptorWrites[0].descriptorCount = 1;
-		descriptorWrites[0].pBufferInfo = &bufferInfo;
-		descriptorWrites[0].pImageInfo = nullptr; // Optional
-		descriptorWrites[0].pTexelBufferView = nullptr; // Optional
-
-		descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[1].dstSet = descriptorSet[i];
-		descriptorWrites[1].dstBinding = 1;
-		descriptorWrites[1].dstArrayElement = 0;
-		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		descriptorWrites[1].descriptorCount = static_cast<uint32_t>(imagesInfo.size());
-		descriptorWrites[1].pImageInfo = imagesInfo.data();
-
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-	}
-}
+void VulkanEngine::freeDescriptorSet(VkDescriptorPool pool,VkDescriptorSet& set) {
+	vkFreeDescriptorSets(device, pool, 1, &set);
+	set = VK_NULL_HANDLE;
+};
 
 //void VulkanEngine::createTextureImage() {
 //	int texWidth, texHeight, texChannels;

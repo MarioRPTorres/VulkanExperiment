@@ -2,6 +2,7 @@
 #define IMPORT_RESOURCES_H
 
 #include "vulkan_engine.h"
+#include "vulkan_vertices.h"
 
 const glm::vec3 red = { 1.0f,0.0f,0.0f };
 const glm::vec3 green = { 0.0f,1.0f,0.0f };

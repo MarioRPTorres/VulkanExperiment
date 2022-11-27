@@ -1,7 +1,12 @@
 #include "vulkan_engine.h"
+#include "vulkan_vertices.h"
+#include "vulkan_descriptors.h"
+#include "vulkan_imgui.h"
 #include "glfwInteraction.h"
 #include "importResources.h"
-#include "vulkan_imgui.h"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
 #include <opencv2/opencv.hpp>
 #include <chrono>
 #include <map>
@@ -11,6 +16,15 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 #include <unordered_map> // To load the models 
+
+#ifdef IMGUI_EXT
+const bool enableImgui = true;
+#else
+const bool enableImgui = false;
+#endif
+
+#define QUDI(x) #x
+#define STRING(x) QUDI(x)
 
 /*
 Future Feature:
@@ -23,12 +37,11 @@ Future Feature:
 • Multiple subpasses
 • Compute shaders
 */
-typedef std::vector<char> shaderCode;
 
 const int WIDTH = 640;
 const int HEIGHT = 480;
 
-extern glm::vec3 cameraEye;
+extern float cameraEye[3];
 
 const std::string MODEL_PATH = "models/cottage_obj.obj";
 const std::string TEXTURE_PATH = "textures/texture_1.png";
@@ -47,12 +60,12 @@ void imguiBuildUI() {
 	ImGui::Render();
 }
 
-
-
 void compileShaders() {
 	// TO DO: Add dynamic location of vulkan installation 
-	system("C:/.local/VulkanSDK-1.3.204/Bin/glslc ./resources/shader.vert -o ./vert.spv");
-	system("C:/.local/VulkanSDK-1.3.204/Bin/glslc ./resources/shader.frag -o ./frag.spv");
+	std::string vulkan_glslc_path = STRING(Vulkan_GLSLC_EXECUTABLE);
+	system((vulkan_glslc_path + " ./shaders/shader.vert -o ./vert.spv").c_str());
+
+	system((vulkan_glslc_path + " ./shaders/shader.frag -o ./frag.spv").c_str());
 }
 
 namespace std {
@@ -151,11 +164,14 @@ public:
 private:
 	shaderCode vert;
 	shaderCode frag;
-
+	BufferBundle vertexBuffer;
+	std::vector<BufferBundle> uniformBuffers;
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<SampledImage, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
-	VulkanImguiDeviceObjects imguiObjects;
+	VulkanImgui_DeviceObjects imguiObjects;
+	VulkanImgui_DeviceObjectsInfo imguiInfo = { false };
+
 	uint32_t imageIndex;
 	bool swapChainOutdated = false;
 
@@ -192,18 +208,18 @@ private:
 		createSwapChain();
 		createSwapChainImageViews();
 		if (enableImgui) {
-			createImguiDeviceObjects((VulkanEngine*)this, imguiObjects);
+			createImguiDeviceObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
 		} 
 		createRenderPass();
 		createDescriptorSetLayout();
 		vert = readFile("./vert.spv");
 		frag = readFile("./frag.spv");
-		createGraphicsPipeline(vert, frag);
+		createGraphicsPipeline(vert, frag, Vertex::getDescriptions());
 		createCommandPool();
 		createColorResources();
 		createDepthResources();
 		createFramebuffers();
-		createVertexBuffer(vertices);
+		vertexBuffer = createVertexBuffer((VulkanEngine*)this, vertices);
 		createIndexBuffer(indices);
 		createCommandBuffers();
 		createUniformBuffers();
@@ -269,8 +285,7 @@ private:
 		vkDestroyBuffer(device, indexBuffer, nullptr);
 		vkFreeMemory(device, indexBufferMemory, nullptr);
 		// Here there is a choice for the Allocator function
-		vkDestroyBuffer(device, vertexBuffer, nullptr);
-		vkFreeMemory(device, vertexBufferMemory, nullptr);
+		destroyBufferBundle(vertexBuffer);
 
 		for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
 			// Here there is a choice for the Allocator function
@@ -327,8 +342,7 @@ private:
 		vkDestroySwapchainKHR(device, swapChain, nullptr);
 
 		for (size_t i = 0; i < swapChainImages.size(); i++) {
-			vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-			vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+			destroyBufferBundle(uniformBuffers[i]);
 		}
 
 		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
@@ -358,7 +372,7 @@ private:
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createRenderPass();
 		createDescriptorPool();
-		createGraphicsPipeline(vert,frag);
+		createGraphicsPipeline(vert,frag, Vertex::getDescriptions());
 		createColorResources();
 		createDepthResources();
 		createFramebuffers();
@@ -369,7 +383,19 @@ private:
 		createCommandBuffers();
 		writeCommandBuffers();
 		if (enableImgui) {
-			recreateImguiSwapChainObjects((VulkanEngine*)this, imguiObjects);
+			recreateImguiSwapChainObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
+		}
+	}
+
+	void createUniformBuffers() {
+		VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+		uniformBuffers.resize(swapChainImages.size());
+
+		for (size_t i = 0; i < swapChainImages.size(); i++) {
+			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i].buffer,
+				uniformBuffers[i].memory);
 		}
 	}
 
@@ -387,15 +413,56 @@ private:
 		//ubo.model[3][0] = 1.0f;
 		//ubo.model[3][1] = 1.0f;
 		//ubo.model[3][2] = 0.0f;
-		ubo.view = glm::lookAt(cameraEye, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+		ubo.view = glm::lookAt(glm::vec3(cameraEye[0], cameraEye[1], cameraEye[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 		ubo.proj = glm::perspective(glm::radians(60.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 60.0f);
 		ubo.proj[1][1] *= -1;
 
 		void* data;
-		vkMapMemory(device, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+		vkMapMemory(device, uniformBuffers[currentImage].memory, 0, sizeof(ubo), 0, &data);
 		memcpy(data, &ubo, sizeof(ubo));
-		vkUnmapMemory(device, uniformBuffersMemory[currentImage]);
+		vkUnmapMemory(device, uniformBuffers[currentImage].memory);
 
+	}
+
+	void updateDescriptorSet(std::array<SampledImage, MAX_SAMPLED_IMAGES> images, int groupIndex) {
+
+
+		std::vector<VkDescriptorSet>& descriptorSet = descriptorSets[groupIndex];
+		for (size_t i = 0; i < swapChainImages.size(); i++) {
+			VkDescriptorBufferInfo bufferInfo = {};
+			bufferInfo.buffer = uniformBuffers[i].buffer;
+			bufferInfo.offset = 0;
+			bufferInfo.range = sizeof(UniformBufferObject);
+
+			std::array<VkDescriptorImageInfo, MAX_SAMPLED_IMAGES> imagesInfo;
+			for (size_t j = 0; j < MAX_SAMPLED_IMAGES; j++) {
+				imagesInfo[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				imagesInfo[j].imageView = images[j].view;
+				imagesInfo[j].sampler = images[j].sampler;
+			}
+
+			std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+
+			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[0].dstSet = descriptorSet[i];
+			descriptorWrites[0].dstBinding = 0;
+			descriptorWrites[0].dstArrayElement = 0;
+			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrites[0].descriptorCount = 1;
+			descriptorWrites[0].pBufferInfo = &bufferInfo;
+			descriptorWrites[0].pImageInfo = nullptr; // Optional
+			descriptorWrites[0].pTexelBufferView = nullptr; // Optional
+
+			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[1].dstSet = descriptorSet[i];
+			descriptorWrites[1].dstBinding = 1;
+			descriptorWrites[1].dstArrayElement = 0;
+			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[1].descriptorCount = static_cast<uint32_t>(imagesInfo.size());
+			descriptorWrites[1].pImageInfo = imagesInfo.data();
+
+			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+		}
 	}
 
 	void drawFrame() {
@@ -680,6 +747,88 @@ private:
 		createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(),(char*) matImage.data);
 
 		matImage.release();
+	}
+
+	void writeCommandBuffers() {
+
+		vkResetCommandPool(device, commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
+		for (size_t i = 0; i < commandBuffers.size(); i++) {
+
+			VkCommandBufferBeginInfo beginInfo = {};
+			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			//• VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT : The command buffer will be rerecorded right after 
+			//	executing it once.
+			//• VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : This is a secondary command buffer that will be 
+			//	entirely within a single render pass.
+			//• VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also 
+			//	already pending execution.
+			beginInfo.flags = 0; // OPtional
+			//  The pInheritanceInfo parameter is only relevant for secondary command
+			//	buffers.It specifies which state to inherit from the calling primary command
+			//	buffers.
+			beginInfo.pInheritanceInfo = nullptr; // Optional
+
+			if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
+				throw std::runtime_error("failed to begin recording command buffer!");
+			}
+
+			VkRenderPassBeginInfo renderPassInfo = {};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassInfo.renderPass = renderPass;
+			renderPassInfo.framebuffer = swapChainFramebuffers[i];
+			renderPassInfo.renderArea.offset = { 0,0 };
+			renderPassInfo.renderArea.extent = swapChainExtent;
+
+			std::array<VkClearValue, 2> clearValues = {};
+			clearValues[0].color = { 0.0f,0.0f,0.0f,1.0f };
+			clearValues[1].depthStencil = { 1.0f, 0 };
+
+			//Note that the order of clearValues should be identical to the order of your attachments in the subpass. 
+			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+			renderPassInfo.pClearValues = clearValues.data();
+
+			//All of the functions that record commands can be recognized by their vkCmd prefix.
+
+			//• VK_SUBPASS_CONTENTS_INLINE : The render pass commands will be embedded in the primary command 
+			//	buffer itself and no secondary command buffers will be executed.
+			//• VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : The render pass commands will be executed
+			//	from secondary command buffers.
+			vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+			vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+			//• vertexCount : Even though we don’t have a vertex buffer, we technically
+			//	still have 3 vertices to draw.
+			//• instanceCount : Used for instanced rendering, use 1 if you’re not doing
+			//	that.
+			//• firstVertex : Used as an offset into the vertex buffer, defines the lowest
+			//	value of gl_VertexIndex.
+			//• firstInstance : Used as an offset for instanced rendering, defines the
+			//	lowest value of gl_InstanceIndex.
+			//vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+			// EDIT: The previous commented was for a hard coded vertices in the shader. The application now allocates a vertex buffer outside
+			// and copys the vertices data from the application to the buffer
+
+			VkBuffer vertexBuffers[] = { vertexBuffer.buffer };
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
+			// We can only have a single index buffer.
+			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+			// Descriptor Set bindings.ffs
+			vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &(descriptorSets[descriptorGroup][i]), 0, nullptr);
+			// Draw Vertex
+			//vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+			// Indexed Vertex Draw
+			vkCmdDrawIndexed(commandBuffers[i], indexCount, 1, 0, 0, 0);
+
+
+			vkCmdEndRenderPass(commandBuffers[i]);
+
+			if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
+				throw std::runtime_error("failed to record command buffer!");
+			}
+		}
 	}
 };
 

@@ -8,7 +8,7 @@ float r = 20.0f;
 const float t0 = 0.0f;
 const float phi0 = pi / 2;
 
-glm::vec3 cameraEye = { r * cos(t0) * sin(phi0) , r * cos(phi0), -r * sin(t0) * sin(phi0) };
+float cameraEye[3] = { r * cos(t0) * sin(phi0) , r * cos(phi0), -r * sin(t0) * sin(phi0) };
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
