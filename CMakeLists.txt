@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # Build Settings 
 set(BUILD_MAIN_EXAMPLE TRUE)
 set(BUILD_EXTRA_EXAMPLES FALSE)
+set(BUILD_SHADERTOY_EXAMPLE TRUE)
  
 # Set Target Name
 set(PROJECT_TARGET VulkanEngine)
@@ -235,6 +236,14 @@ if (BUILD_MAIN_EXAMPLE)
 	    example/VulkanTutorial.cpp
     )
     CONFIGUREEXAMPLETARGET(${EXAMPLE_MAIN_TARGET} TRUE TRUE)
+endif()
+
+if (BUILD_SHADERTOY_EXAMPLE)
+    # Create the Vulkan Tutorial application target using the main.cpp example 
+    add_executable( ShaderToyLoad 
+	    example/ShaderToyLoad.cpp
+    )
+    CONFIGUREEXAMPLETARGET(ShaderToyLoad TRUE FALSE)
 endif()
 
 if (BUILD_EXTRA_EXAMPLES)
