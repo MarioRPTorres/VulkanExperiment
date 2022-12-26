@@ -221,8 +221,6 @@ struct ImGui_ImplVulkan_Data
 	VkImage                     FontImage;
 	VkImageView                 FontView;
 	VkDescriptorSet             FontDescriptorSet;
-	VkDeviceMemory              UploadBufferMemory;
-	VkBuffer                    UploadBuffer;
 
 	// Render buffers for main window
 	ImGui_ImplVulkanH_WindowRenderBuffers MainWindowRenderBuffers;
@@ -1333,23 +1331,6 @@ void initImgui(VulkanEngine* vk,VulkanImgui_DeviceObjects& imObj) {
 	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
 	VkResult err;
 
-	if (!bd->FontSampler)
-	{
-		VkSamplerCreateInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-		info.magFilter = VK_FILTER_LINEAR;
-		info.minFilter = VK_FILTER_LINEAR;
-		info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-		info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		info.minLod = -1000;
-		info.maxLod = 1000;
-		info.maxAnisotropy = 1.0f;
-		err = vkCreateSampler(v->Device, &info, v->Allocator, &bd->FontSampler);
-		check_vk_result(err);
-	}
-
 	if (!bd->DescriptorSetLayout)
 	{
 		VkSampler sampler[1] = { bd->FontSampler };
@@ -1556,28 +1537,11 @@ void ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(VkDevice device, const V
 			ImGui_ImplVulkanH_DestroyWindowRenderBuffers(device, &vd->RenderBuffers, allocator);
 }
 
-void ImGui_ImplVulkan_DestroyFontUploadObjects()
-{
-	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
-	if (bd->UploadBuffer)
-	{
-		vkDestroyBuffer(v->Device, bd->UploadBuffer, v->Allocator);
-		bd->UploadBuffer = VK_NULL_HANDLE;
-	}
-	if (bd->UploadBufferMemory)
-	{
-		vkFreeMemory(v->Device, bd->UploadBufferMemory, v->Allocator);
-		bd->UploadBufferMemory = VK_NULL_HANDLE;
-	}
-}
-
 void ImGui_ImplVulkan_DestroyDeviceObjects()
 {
 	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
 	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
 	ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(v->Device, v->Allocator);
-	ImGui_ImplVulkan_DestroyFontUploadObjects();
 
 	if (bd->FontView) { vkDestroyImageView(v->Device, bd->FontView, v->Allocator); bd->FontView = VK_NULL_HANDLE; }
 	if (bd->FontImage) { vkDestroyImage(v->Device, bd->FontImage, v->Allocator); bd->FontImage = VK_NULL_HANDLE; }
