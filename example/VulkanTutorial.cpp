@@ -211,8 +211,8 @@ private:
 		} 
 		createRenderPass();
 		createDescriptorSetLayout();
-		vert = readFile("./vert.spv");
-		frag = readFile("./frag.spv");
+		char2shaderCode(readFile("./vert.spv"),vert);
+		char2shaderCode(readFile("./frag.spv"),frag);
 		createGraphicsPipeline(vert, frag, Vertex::getDescriptions());
 		createCommandPool();
 		createColorResources();

@@ -46,7 +46,7 @@ const std::vector<const char*> deviceExtensions = {
 };
 
 // ****************** Datatypes ********************
-typedef std::vector<char> shaderCode;
+typedef std::vector<uint32_t> shaderCode;
 
 typedef struct _SampledImage {
 	VkImage image = VK_NULL_HANDLE;
@@ -119,6 +119,8 @@ struct vertexDescriptions {
 };
 
 // *************** Other Functions *************
+void char2shaderCode(std::vector<char> inCharVector, shaderCode& outShaderCode);
+
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 
 // ***************************** Vulkan Engine Class ****************************
@@ -201,7 +203,6 @@ protected:
 	void createRenderPass();
 	void createDescriptorSetLayout();
 	// For creating the graphics pipeline
-	VkShaderModule createShaderModule(const std::vector<char>& code);
 	void createGraphicsPipeline(shaderCode vert, shaderCode frag, vertexDescriptions vertex);
 
 	// Various Resources
@@ -239,6 +240,7 @@ protected:
 
 
 public:
+	VkShaderModule createShaderModule(const shaderCode& code);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
 	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
 	void cleanupSampledImage(SampledImage& image);

@@ -4,6 +4,13 @@
 //**********************************************************************
 
 //**************************** Helper Functions ****************************
+void char2shaderCode(std::vector<char> inCharVector, shaderCode& outShaderCode) {
+	outShaderCode.clear();
+	size_t intCount = (int)(inCharVector.size() * sizeof(char) / sizeof(uint32_t));
+	outShaderCode = shaderCode((uint32_t*)inCharVector.data(), (uint32_t*)inCharVector.data() + intCount);
+	return;
+}
+
 ///// Debug CallBack
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,		// Message Severity Level
@@ -802,13 +809,13 @@ void VulkanEngine::createDescriptorSetLayout() {
 	}
 }
 
-VkShaderModule VulkanEngine::createShaderModule(const std::vector<char>& code) {
+VkShaderModule VulkanEngine::createShaderModule(const shaderCode& code) {
 	VkShaderModuleCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-	createInfo.codeSize = code.size();
+	createInfo.codeSize = code.size() * sizeof(code.at(0));
 	// The byte code must be in uint32_t format with the same alignment requirements. Luckily the std::vector
 	// default allocator already meet the worst case alignment requirements.
-	createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+	createInfo.pCode = code.data();
 
 	VkShaderModule shaderModule;
 	// Here there is a choice for the Allocator function

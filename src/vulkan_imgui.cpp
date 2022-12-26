@@ -20,7 +20,7 @@ void main()
 	gl_Position = vec4(aPos * pc.uScale + pc.uTranslate, 0, 1);
 }
 */
-static uint32_t __glsl_shader_vert_spv[] =
+static shaderCode __glsl_shader_vert_spv =
 {
 	0x07230203,0x00010000,0x00080001,0x0000002e,0x00000000,0x00020011,0x00000001,0x0006000b,
 	0x00000001,0x4c534c47,0x6474732e,0x3035342e,0x00000000,0x0003000e,0x00000000,0x00000001,
@@ -77,7 +77,7 @@ void main()
 	fColor = In.Color * texture(sTexture, In.UV.st);
 }
 */
-static uint32_t __glsl_shader_frag_spv[] =
+static shaderCode __glsl_shader_frag_spv =
 {
 	0x07230203,0x00010000,0x00080001,0x0000001e,0x00000000,0x00020011,0x00000001,0x0006000b,
 	0x00000001,0x4c534c47,0x6474732e,0x3035342e,0x00000000,0x0003000e,0x00000000,0x00000001,
@@ -362,35 +362,16 @@ static void ImGui_ImplVulkan_CreatePipelineLayout(VkDevice device, const VkAlloc
 	check_vk_result(err);
 }
 
-
-static void ImGui_ImplVulkan_CreateShaderModules(VkDevice device, const VkAllocationCallbacks* allocator)
+static void ImGui_ImplVulkan_CreatePipeline(VulkanEngine* vk, const VkAllocationCallbacks* allocator, VkPipelineCache pipelineCache, VkRenderPass renderPass, VkSampleCountFlagBits MSAASamples, VkPipeline* pipeline, uint32_t subpass)
 {
-	// Create the shader modules
+	VulkanBackEndData backend = vk->getBackEndData();
 	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-	if (bd->ShaderModuleVert == VK_NULL_HANDLE)
-	{
-		VkShaderModuleCreateInfo vert_info = {};
-		vert_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		vert_info.codeSize = sizeof(__glsl_shader_vert_spv);
-		vert_info.pCode = (uint32_t*)__glsl_shader_vert_spv;
-		VkResult err = vkCreateShaderModule(device, &vert_info, allocator, &bd->ShaderModuleVert);
-		check_vk_result(err);
-	}
-	if (bd->ShaderModuleFrag == VK_NULL_HANDLE)
-	{
-		VkShaderModuleCreateInfo frag_info = {};
-		frag_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		frag_info.codeSize = sizeof(__glsl_shader_frag_spv);
-		frag_info.pCode = (uint32_t*)__glsl_shader_frag_spv;
-		VkResult err = vkCreateShaderModule(device, &frag_info, allocator, &bd->ShaderModuleFrag);
-		check_vk_result(err);
-	}
-}
 
-static void ImGui_ImplVulkan_CreatePipeline(VkDevice device, const VkAllocationCallbacks* allocator, VkPipelineCache pipelineCache, VkRenderPass renderPass, VkSampleCountFlagBits MSAASamples, VkPipeline* pipeline, uint32_t subpass)
-{
-	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-	ImGui_ImplVulkan_CreateShaderModules(device, allocator);
+
+	if (!bd->ShaderModuleVert) bd->ShaderModuleVert = vk->createShaderModule(__glsl_shader_vert_spv);
+	if (!bd->ShaderModuleFrag) bd->ShaderModuleFrag = vk->createShaderModule(__glsl_shader_frag_spv);
+
+	//ImGui_ImplVulkan_CreateShaderModules(backend.device, allocator);
 
 	VkPipelineShaderStageCreateInfo stage[2] = {};
 	stage[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -471,7 +452,7 @@ static void ImGui_ImplVulkan_CreatePipeline(VkDevice device, const VkAllocationC
 	dynamic_state.dynamicStateCount = (uint32_t)IM_ARRAYSIZE(dynamic_states);
 	dynamic_state.pDynamicStates = dynamic_states;
 
-	ImGui_ImplVulkan_CreatePipelineLayout(device, allocator);
+	ImGui_ImplVulkan_CreatePipelineLayout(backend.device, allocator);
 
 	VkGraphicsPipelineCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -489,11 +470,11 @@ static void ImGui_ImplVulkan_CreatePipeline(VkDevice device, const VkAllocationC
 	info.layout = bd->PipelineLayout;
 	info.renderPass = renderPass;
 	info.subpass = subpass;
-	VkResult err = vkCreateGraphicsPipelines(device, pipelineCache, 1, &info, allocator, pipeline);
+	VkResult err = vkCreateGraphicsPipelines(backend.device, pipelineCache, 1, &info, allocator, pipeline);
 	check_vk_result(err);
 }
 
-bool ImGui_ImplVulkan_CreateDeviceObjects(ImGui_ImplVulkan_Data* bd)
+bool ImGui_ImplVulkan_CreateDeviceObjects(VulkanEngine* vk,ImGui_ImplVulkan_Data* bd)
 {
 	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
 	VkResult err;
@@ -549,7 +530,7 @@ bool ImGui_ImplVulkan_CreateDeviceObjects(ImGui_ImplVulkan_Data* bd)
 		check_vk_result(err);
 	}
 
-	ImGui_ImplVulkan_CreatePipeline(v->Device, v->Allocator, v->PipelineCache, bd->RenderPass, v->MSAASamples, &bd->Pipeline, bd->Subpass);
+	ImGui_ImplVulkan_CreatePipeline(vk, v->Allocator, v->PipelineCache, bd->RenderPass, v->MSAASamples, &bd->Pipeline, bd->Subpass);
 
 	return true;
 }
@@ -1416,7 +1397,7 @@ void initImgui(VulkanEngine* vk,VulkanImgui_DeviceObjects& imObj) {
 	bd->FontMemory = sImg.memory;
 	bd->FontView = sImg.view;
 	bd->FontSampler = sImg.sampler;
-	ImGui_ImplVulkan_CreateDeviceObjects(bd);
+	ImGui_ImplVulkan_CreateDeviceObjects(vk,bd);
 
 	// Our render function expect RendererUserData to be storing the window render buffer we need (for the main viewport we won't use ->Window)
 	ImGuiViewport* main_viewport = ImGui::GetMainViewport();

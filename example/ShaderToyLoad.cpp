@@ -102,8 +102,8 @@ private:
 		std::string fs = "./";
 		fs.append(fragShader);
 		fs.append(".spv");
-		vert = readFile(vs);
-		frag = readFile(fs);
+		char2shaderCode(readFile(vs), vert);
+		char2shaderCode(readFile(fs), frag);
 		createGraphicsPipeline(vert, frag);
 		createShaderToyCommandPool();
 		createFramebuffers();
