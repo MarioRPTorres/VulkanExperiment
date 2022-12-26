@@ -1614,7 +1614,7 @@ void VulkanEngine::createImageSampler(VkSampler& sampler, uint32_t mipLevels) {
 	}
 }
 
-void VulkanEngine::createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData) {
+void VulkanEngine::createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData,uint32_t mipLvls, VkSampleCountFlagBits numsamples) {
 	VkDeviceSize imageSize = rows*cols * elemSize;
 
 
@@ -1631,30 +1631,35 @@ void VulkanEngine::createSampledImage(SampledImage& image, int cols, int rows, i
 	memcpy(data, imageData, static_cast<size_t>(imageSize));
 	vkUnmapMemory(device, stagingBufferMemory);
 
-	mipLevels = 5;
 	createImage(
 		cols,
 		rows,
-		mipLevels,
-		VK_SAMPLE_COUNT_1_BIT,
+		mipLvls,
+		numsamples,
 		VK_FORMAT_R8G8B8A8_SRGB,
 		VK_IMAGE_TILING_OPTIMAL,
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		(mipLvls>1 ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0) | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		image.image,
 		image.memory);
 
-	transitionImageLayout(image.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
-	copyBufferToImage(stagingBuffer, image.image, static_cast<uint32_t>(cols), static_cast<uint32_t>(rows));
-
-	generateMipmaps(image.image, VK_FORMAT_R8G8B8A8_SRGB, cols, rows, mipLevels);
+	if (mipLvls > 1) {
+		transitionImageLayout(image.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLvls);
+		copyBufferToImage(stagingBuffer, image.image, static_cast<uint32_t>(cols), static_cast<uint32_t>(rows));
+		generateMipmaps(image.image, VK_FORMAT_R8G8B8A8_SRGB, cols, rows, mipLvls);
+	}
+	else {
+		transitionImageLayout(image.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLvls);
+		copyBufferToImage(stagingBuffer, image.image, static_cast<uint32_t>(cols), static_cast<uint32_t>(rows));
+		transitionImageLayout(image.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLvls);
+	}
 
 	vkDestroyBuffer(device, stagingBuffer, nullptr);
 	vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-	image.view = createImageView(image.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
+	image.view = createImageView(image.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLvls);
 
-	createImageSampler(image.sampler, mipLevels);
+	createImageSampler(image.sampler, mipLvls);
 }
 
 void VulkanEngine::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {

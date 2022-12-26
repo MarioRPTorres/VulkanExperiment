@@ -85,7 +85,6 @@ target_sources( IMGUI
                     ${IMGUI_DIR}/imgui.cpp
 
                 PRIVATE
-                    ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
                     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
                 )
 

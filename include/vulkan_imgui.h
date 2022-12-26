@@ -1,5 +1,7 @@
 #ifndef IMGUI_VULKAN_H
 #define IMGUI_VULKAN_H
+
+#include "imgui.h"
 #include "vulkan_engine.h"
 
 
@@ -22,4 +24,7 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 void cleanupImguiObjects(VkDevice device, VulkanImgui_DeviceObjects& imObj);
 void cleanupImguiSwapChainObjects(VkDevice device, VulkanImgui_DeviceObjects& imObj);
 void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj, VulkanImgui_DeviceObjectsInfo info);
+
+void VKEngine_Imgui_NewFrame();
+void VKEngine_Imgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline = VK_NULL_HANDLE);
 #endif

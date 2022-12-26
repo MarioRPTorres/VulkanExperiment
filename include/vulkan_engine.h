@@ -240,7 +240,7 @@ protected:
 
 public:
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
-	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData);
+	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
 	void cleanupSampledImage(SampledImage& image);
 	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
 	void destroyBufferBundle(BufferBundle buffer);

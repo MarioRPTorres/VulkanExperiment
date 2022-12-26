@@ -4,9 +4,7 @@
 #include "vulkan_imgui.h"
 #include "glfwInteraction.h"
 #include "importResources.h"
-#include "imgui.h"
 #include "imgui_impl_glfw.h"
-#include "imgui_impl_vulkan.h"
 #include <opencv2/opencv.hpp>
 #include <chrono>
 #include <map>
@@ -53,7 +51,7 @@ std::vector<uint32_t> indices = {};
 std::vector<Vertex> vertices = {};
 
 void imguiBuildUI() {
-	ImGui_ImplVulkan_NewFrame();
+	VKEngine_Imgui_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 	ImGui::ShowDemoWindow();
@@ -155,6 +153,7 @@ static std::vector<char>readFile(const std::string& filename) {
 class HelloTriangleApplication:protected VulkanEngine {
 public:
 	void run() {
+		mipLevels = 3;
 		initWindow();
 		initVulkan();
 		if (enableImgui) initImgui((VulkanEngine*)this,imguiObjects);
@@ -541,7 +540,7 @@ private:
 			vkCmdBeginRenderPass(imguiObjects.commandBuffers[imageIndex], &imguiRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 			// Record Imgui Draw Data and draw funcs into command buffer
-			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), imguiObjects.commandBuffers[imageIndex]);
+			VKEngine_Imgui_RenderDrawData(ImGui::GetDrawData(), imguiObjects.commandBuffers[imageIndex]);
 			// Submit command buffer
 			vkCmdEndRenderPass(imguiObjects.commandBuffers[imageIndex]);
 			err = vkEndCommandBuffer(imguiObjects.commandBuffers[imageIndex]);
@@ -744,7 +743,7 @@ private:
 	void createTexture(SampledImage& image, std::string imageFile){
 		cv::Mat matImage = loadImage(imageFile);
 
-		createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(),(char*) matImage.data);
+		createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(),(char*) matImage.data, mipLevels, VK_SAMPLE_COUNT_1_BIT);
 
 		matImage.release();
 	}
