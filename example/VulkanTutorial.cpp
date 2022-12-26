@@ -298,7 +298,7 @@ private:
 		
 		if (enableImgui) {
 			// Resources to destroy when the program ends
-			cleanupImguiObjects(device, imguiObjects);
+			cleanupImguiObjects(imguiObjects);
 		}
 
 		vkDestroyDevice(device, nullptr);
@@ -332,7 +332,7 @@ private:
 		vkDestroyRenderPass(device, renderPass, nullptr);
 
 		if (enableImgui) {
-			cleanupImguiSwapChainObjects(device, imguiObjects);
+			cleanupImguiSwapChainObjects(imguiObjects);
 		}
 
 		for (size_t i = 0; i < swapChainImageViews.size(); i++) {

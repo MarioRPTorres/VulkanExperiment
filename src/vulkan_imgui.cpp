@@ -214,8 +214,6 @@ struct ImGui_ImplVulkan_Data
 	VkPipelineLayout            PipelineLayout;
 	VkPipeline                  Pipeline;
 	uint32_t                    Subpass;
-	VkShaderModule              ShaderModuleVert;
-	VkShaderModule              ShaderModuleFrag;
 
 	// Font data
 	VkSampler                   FontSampler;
@@ -362,25 +360,18 @@ static void ImGui_ImplVulkan_CreatePipelineLayout(VkDevice device, const VkAlloc
 	check_vk_result(err);
 }
 
-static void ImGui_ImplVulkan_CreatePipeline(VulkanEngine* vk, const VkAllocationCallbacks* allocator, VkPipelineCache pipelineCache, VkRenderPass renderPass, VkSampleCountFlagBits MSAASamples, VkPipeline* pipeline, uint32_t subpass)
+static void ImGui_ImplVulkan_CreatePipeline(VulkanImgui_DeviceObjects& imObj, const VkAllocationCallbacks* allocator, VkPipelineCache pipelineCache, VkRenderPass renderPass, VkSampleCountFlagBits MSAASamples, VkPipeline* pipeline, uint32_t subpass)
 {
-	VulkanBackEndData backend = vk->getBackEndData();
 	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-
-
-	if (!bd->ShaderModuleVert) bd->ShaderModuleVert = vk->createShaderModule(__glsl_shader_vert_spv);
-	if (!bd->ShaderModuleFrag) bd->ShaderModuleFrag = vk->createShaderModule(__glsl_shader_frag_spv);
-
-	//ImGui_ImplVulkan_CreateShaderModules(backend.device, allocator);
 
 	VkPipelineShaderStageCreateInfo stage[2] = {};
 	stage[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	stage[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-	stage[0].module = bd->ShaderModuleVert;
+	stage[0].module = imObj.ShaderModuleVert;
 	stage[0].pName = "main";
 	stage[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	stage[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	stage[1].module = bd->ShaderModuleFrag;
+	stage[1].module = imObj.ShaderModuleFrag;
 	stage[1].pName = "main";
 
 	VkVertexInputBindingDescription binding_desc[1] = {};
@@ -452,7 +443,7 @@ static void ImGui_ImplVulkan_CreatePipeline(VulkanEngine* vk, const VkAllocation
 	dynamic_state.dynamicStateCount = (uint32_t)IM_ARRAYSIZE(dynamic_states);
 	dynamic_state.pDynamicStates = dynamic_states;
 
-	ImGui_ImplVulkan_CreatePipelineLayout(backend.device, allocator);
+	ImGui_ImplVulkan_CreatePipelineLayout(imObj.device, allocator);
 
 	VkGraphicsPipelineCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -470,69 +461,8 @@ static void ImGui_ImplVulkan_CreatePipeline(VulkanEngine* vk, const VkAllocation
 	info.layout = bd->PipelineLayout;
 	info.renderPass = renderPass;
 	info.subpass = subpass;
-	VkResult err = vkCreateGraphicsPipelines(backend.device, pipelineCache, 1, &info, allocator, pipeline);
+	VkResult err = vkCreateGraphicsPipelines(imObj.device, pipelineCache, 1, &info, allocator, pipeline);
 	check_vk_result(err);
-}
-
-bool ImGui_ImplVulkan_CreateDeviceObjects(VulkanEngine* vk,ImGui_ImplVulkan_Data* bd)
-{
-	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
-	VkResult err;
-
-	if (!bd->FontSampler)
-	{
-		VkSamplerCreateInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-		info.magFilter = VK_FILTER_LINEAR;
-		info.minFilter = VK_FILTER_LINEAR;
-		info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-		info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		info.minLod = -1000;
-		info.maxLod = 1000;
-		info.maxAnisotropy = 1.0f;
-		err = vkCreateSampler(v->Device, &info, v->Allocator, &bd->FontSampler);
-		check_vk_result(err);
-	}
-
-	if (!bd->DescriptorSetLayout)
-	{
-		VkSampler sampler[1] = { bd->FontSampler };
-		VkDescriptorSetLayoutBinding binding[1] = {};
-		binding[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		binding[0].descriptorCount = 1;
-		binding[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-		binding[0].pImmutableSamplers = sampler;
-		VkDescriptorSetLayoutCreateInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		info.bindingCount = 1;
-		info.pBindings = binding;
-		err = vkCreateDescriptorSetLayout(v->Device, &info, v->Allocator, &bd->DescriptorSetLayout);
-		check_vk_result(err);
-	}
-
-	if (!bd->PipelineLayout)
-	{
-		// Constants: we are using 'vec2 offset' and 'vec2 scale' instead of a full 3d projection matrix
-		VkPushConstantRange push_constants[1] = {};
-		push_constants[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-		push_constants[0].offset = sizeof(float) * 0;
-		push_constants[0].size = sizeof(float) * 4;
-		VkDescriptorSetLayout set_layout[1] = { bd->DescriptorSetLayout };
-		VkPipelineLayoutCreateInfo layout_info = {};
-		layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		layout_info.setLayoutCount = 1;
-		layout_info.pSetLayouts = set_layout;
-		layout_info.pushConstantRangeCount = 1;
-		layout_info.pPushConstantRanges = push_constants;
-		err = vkCreatePipelineLayout(v->Device, &layout_info, v->Allocator, &bd->PipelineLayout);
-		check_vk_result(err);
-	}
-
-	ImGui_ImplVulkan_CreatePipeline(vk, v->Allocator, v->PipelineCache, bd->RenderPass, v->MSAASamples, &bd->Pipeline, bd->Subpass);
-
-	return true;
 }
 
 VkSurfaceFormatKHR ImGui_ImplVulkanH_SelectSurfaceFormat(VkPhysicalDevice physical_device, VkSurfaceKHR surface, const VkFormat* request_formats, int request_formats_count, VkColorSpaceKHR request_color_space)
@@ -1305,9 +1235,9 @@ VkDescriptorSet ImGui_ImplVulkan_AddTexture(VkSampler sampler, VkImageView image
 // ***VulkanImgui***
 
 // Forward Declarations
-void createImguiRenderPass(VkDevice device, VkFormat format, VkRenderPass& renderPass,bool firstPass);
-void createImguiCommandBuffers(VkDevice device, uint32_t swapChainImageCount, VulkanImgui_DeviceObjects& imObj);
-void createImguiFrameBuffers(VkDevice device, SwapChainDetails sc, VulkanImgui_DeviceObjects& imObj);
+void createImguiRenderPass(VulkanImgui_DeviceObjects& imObj, VkFormat format,bool firstPass);
+void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapChainImageCount);
+void createImguiFrameBuffers(VulkanImgui_DeviceObjects& imObj, SwapChainDetails sc);
 
 void check_vk_result(VkResult err)
 {
@@ -1397,7 +1327,67 @@ void initImgui(VulkanEngine* vk,VulkanImgui_DeviceObjects& imObj) {
 	bd->FontMemory = sImg.memory;
 	bd->FontView = sImg.view;
 	bd->FontSampler = sImg.sampler;
-	ImGui_ImplVulkan_CreateDeviceObjects(vk,bd);
+	
+	// Create core objects
+	//ImGui_ImplVulkan_CreateDeviceObjects(vk,bd);
+	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+	VkResult err;
+
+	if (!bd->FontSampler)
+	{
+		VkSamplerCreateInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		info.magFilter = VK_FILTER_LINEAR;
+		info.minFilter = VK_FILTER_LINEAR;
+		info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		info.minLod = -1000;
+		info.maxLod = 1000;
+		info.maxAnisotropy = 1.0f;
+		err = vkCreateSampler(v->Device, &info, v->Allocator, &bd->FontSampler);
+		check_vk_result(err);
+	}
+
+	if (!bd->DescriptorSetLayout)
+	{
+		VkSampler sampler[1] = { bd->FontSampler };
+		VkDescriptorSetLayoutBinding binding[1] = {};
+		binding[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		binding[0].descriptorCount = 1;
+		binding[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		binding[0].pImmutableSamplers = sampler;
+		VkDescriptorSetLayoutCreateInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		info.bindingCount = 1;
+		info.pBindings = binding;
+		err = vkCreateDescriptorSetLayout(v->Device, &info, v->Allocator, &bd->DescriptorSetLayout);
+		check_vk_result(err);
+	}
+
+	if (!bd->PipelineLayout)
+	{
+		// Constants: we are using 'vec2 offset' and 'vec2 scale' instead of a full 3d projection matrix
+		VkPushConstantRange push_constants[1] = {};
+		push_constants[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		push_constants[0].offset = sizeof(float) * 0;
+		push_constants[0].size = sizeof(float) * 4;
+		VkDescriptorSetLayout set_layout[1] = { bd->DescriptorSetLayout };
+		VkPipelineLayoutCreateInfo layout_info = {};
+		layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		layout_info.setLayoutCount = 1;
+		layout_info.pSetLayouts = set_layout;
+		layout_info.pushConstantRangeCount = 1;
+		layout_info.pPushConstantRanges = push_constants;
+		err = vkCreatePipelineLayout(v->Device, &layout_info, v->Allocator, &bd->PipelineLayout);
+		check_vk_result(err);
+	}
+
+	if (!imObj.ShaderModuleVert) imObj.ShaderModuleVert = vk->createShaderModule(__glsl_shader_vert_spv);
+	if (!imObj.ShaderModuleFrag) imObj.ShaderModuleFrag = vk->createShaderModule(__glsl_shader_frag_spv);
+	ImGui_ImplVulkan_CreatePipeline(imObj, v->Allocator, v->PipelineCache, bd->RenderPass, v->MSAASamples, &bd->Pipeline, bd->Subpass);
+
 
 	// Our render function expect RendererUserData to be storing the window render buffer we need (for the main viewport we won't use ->Window)
 	ImGuiViewport* main_viewport = ImGui::GetMainViewport();
@@ -1415,7 +1405,7 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 	VulkanBackEndData bd = vk->getBackEndData();
 	SwapChainDetails sc = vk->getSwapChainDetails();
 
-
+	imObj.device = bd.device;
 
 	// **************** Descriptor Pool ************************
 	VkDescriptorPoolSize pool_sizes[] =
@@ -1442,7 +1432,7 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 	descriptorPoolInfo.poolSizeCount = pool_sizes_count;
 	descriptorPoolInfo.pPoolSizes = pool_sizes;
 
-	if (vkCreateDescriptorPool(bd.device, &descriptorPoolInfo, nullptr, &imObj.descriptorPool) != VK_SUCCESS) {
+	if (vkCreateDescriptorPool(imObj.device, &descriptorPoolInfo, nullptr, &imObj.descriptorPool) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create imgui descriptor pool!");
 	}
 
@@ -1458,16 +1448,16 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 
 
 	// Here there is a choice for the Allocator function
-	if (vkCreateCommandPool(bd.device, &commandPoolInfo, nullptr, &imObj.commandPool ) != VK_SUCCESS) {
+	if (vkCreateCommandPool(imObj.device, &commandPoolInfo, nullptr, &imObj.commandPool ) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create command pool!");
 	}
 
-	createImguiCommandBuffers(bd.device, sc.imageCount, imObj);
-	createImguiRenderPass(bd.device, sc.format, imObj.renderPass,info.firstPass);
-	createImguiFrameBuffers(bd.device, sc, imObj);
+	createImguiCommandBuffers(imObj, sc.imageCount);
+	createImguiRenderPass(imObj, sc.format,info.firstPass);
+	createImguiFrameBuffers(imObj, sc);
 }
 
-void createImguiRenderPass(VkDevice device, VkFormat format, VkRenderPass& renderPass,bool firstPass) {
+void createImguiRenderPass(VulkanImgui_DeviceObjects& imObj, VkFormat format,bool firstPass) {
 	
 	// ****************  Imgui Render Pass **************
 	// Color Attachment creation
@@ -1512,12 +1502,12 @@ void createImguiRenderPass(VkDevice device, VkFormat format, VkRenderPass& rende
 	imguiRenderPassInfo.pDependencies = &imguiDependency;
 
 	// Here there is a choice for the Allocator function
-	if (vkCreateRenderPass(device, &imguiRenderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+	if (vkCreateRenderPass(imObj.device, &imguiRenderPassInfo, nullptr, &imObj.renderPass) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create imgui render pass!");
 	}
 }
 
-void createImguiCommandBuffers(VkDevice device, uint32_t swapChainImageCount, VulkanImgui_DeviceObjects& imObj) {
+void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapChainImageCount) {
 	// **************** Command Buffers ************************
 
 	imObj.commandBuffers.resize(swapChainImageCount);
@@ -1529,12 +1519,12 @@ void createImguiCommandBuffers(VkDevice device, uint32_t swapChainImageCount, Vu
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = (uint32_t)imObj.commandBuffers.size();
 
-	if (vkAllocateCommandBuffers(device, &allocInfo, imObj.commandBuffers.data()) != VK_SUCCESS) {
+	if (vkAllocateCommandBuffers(imObj.device, &allocInfo, imObj.commandBuffers.data()) != VK_SUCCESS) {
 		throw std::runtime_error("failed to allocate imgui command buffers!");
 	}
 }
 
-void createImguiFrameBuffers(VkDevice device, SwapChainDetails sc,VulkanImgui_DeviceObjects& imObj) {
+void createImguiFrameBuffers(VulkanImgui_DeviceObjects& imObj, SwapChainDetails sc) {
 	uint32_t imageCount = static_cast<uint32_t>(sc.imageViews.size());
 	imObj.frameBuffers.resize(imageCount);
 
@@ -1551,7 +1541,7 @@ void createImguiFrameBuffers(VkDevice device, SwapChainDetails sc,VulkanImgui_De
 		frameBufferInfo.layers = 1;
 
 		// Here there is a choice for the Allocator function
-		if (vkCreateFramebuffer(device, &frameBufferInfo, nullptr, &imObj.frameBuffers[i]) != VK_SUCCESS) {
+		if (vkCreateFramebuffer(imObj.device, &frameBufferInfo, nullptr, &imObj.frameBuffers[i]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create imgui framebuffer!");
 		}
 	}
@@ -1589,8 +1579,6 @@ void ImGui_ImplVulkan_DestroyDeviceObjects()
 	ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(v->Device, v->Allocator);
 	ImGui_ImplVulkan_DestroyFontUploadObjects();
 
-	if (bd->ShaderModuleVert) { vkDestroyShaderModule(v->Device, bd->ShaderModuleVert, v->Allocator); bd->ShaderModuleVert = VK_NULL_HANDLE; }
-	if (bd->ShaderModuleFrag) { vkDestroyShaderModule(v->Device, bd->ShaderModuleFrag, v->Allocator); bd->ShaderModuleFrag = VK_NULL_HANDLE; }
 	if (bd->FontView) { vkDestroyImageView(v->Device, bd->FontView, v->Allocator); bd->FontView = VK_NULL_HANDLE; }
 	if (bd->FontImage) { vkDestroyImage(v->Device, bd->FontImage, v->Allocator); bd->FontImage = VK_NULL_HANDLE; }
 	if (bd->FontMemory) { vkFreeMemory(v->Device, bd->FontMemory, v->Allocator); bd->FontMemory = VK_NULL_HANDLE; }
@@ -1645,22 +1633,24 @@ void ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count)
 }
 
 
-void cleanupImguiObjects(VkDevice device, VulkanImgui_DeviceObjects& imObj) {
+void cleanupImguiObjects(VulkanImgui_DeviceObjects& imObj) {
 
 	// Resources to destroy when the program ends
-	vkDestroyDescriptorPool(device, imObj.descriptorPool, nullptr);
-	vkDestroyCommandPool(device, imObj.commandPool, nullptr);
+	if (imObj.ShaderModuleVert) { vkDestroyShaderModule(imObj.device, imObj.ShaderModuleVert, nullptr); imObj.ShaderModuleVert = VK_NULL_HANDLE; }
+	if (imObj.ShaderModuleFrag) { vkDestroyShaderModule(imObj.device, imObj.ShaderModuleFrag, nullptr); imObj.ShaderModuleFrag = VK_NULL_HANDLE; }
+	if (imObj.descriptorPool) { vkDestroyDescriptorPool(imObj.device, imObj.descriptorPool, nullptr); imObj.descriptorPool = VK_NULL_HANDLE; }
+	if (imObj.commandPool) { vkDestroyCommandPool(imObj.device, imObj.commandPool, nullptr); imObj.commandPool = VK_NULL_HANDLE; }
 	VKEngine_Imgui_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 }
 
-void cleanupImguiSwapChainObjects(VkDevice device, VulkanImgui_DeviceObjects& imObj) {
+void cleanupImguiSwapChainObjects(VulkanImgui_DeviceObjects& imObj) {
 	for (size_t i = 0; i < imObj.frameBuffers.size(); i++) {
-		vkDestroyFramebuffer(device, imObj.frameBuffers[i], nullptr);
+		vkDestroyFramebuffer(imObj.device, imObj.frameBuffers[i], nullptr);
 	}
-	vkFreeCommandBuffers(device, imObj.commandPool, static_cast<uint32_t>(imObj.commandBuffers.size()), imObj.commandBuffers.data());
-	vkDestroyRenderPass(device, imObj.renderPass, nullptr);
+	vkFreeCommandBuffers(imObj.device, imObj.commandPool, static_cast<uint32_t>(imObj.commandBuffers.size()), imObj.commandBuffers.data());
+	vkDestroyRenderPass(imObj.device, imObj.renderPass, nullptr);
 }
 
 void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj, VulkanImgui_DeviceObjectsInfo info) {
@@ -1668,7 +1658,7 @@ void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& 
 	SwapChainDetails sc = vk->getSwapChainDetails();
 	
 	ImGui_ImplVulkan_SetMinImageCount(sc.minImageCount);
-	createImguiCommandBuffers(bd.device, sc.imageCount, imObj);
-	createImguiRenderPass(bd.device, sc.format, imObj.renderPass, info.firstPass);
-	createImguiFrameBuffers(bd.device, sc, imObj);
+	createImguiCommandBuffers(imObj, sc.imageCount);
+	createImguiRenderPass(imObj, sc.format, info.firstPass);
+	createImguiFrameBuffers(imObj, sc);
 }
