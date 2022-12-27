@@ -19,5 +19,5 @@ struct UniformBufferObject {
 };
 #endif
 
-VkDescriptorSet createSingleImageDecriptorSet(VulkanEngine* vk, VkDescriptorPool pool, SampledImage image);
+VkDescriptorSet createSingleImageDecriptorSet(VulkanEngine* vk, VkDescriptorPool pool, VkDescriptorSetLayout layout, SampledImage image);
 #endif

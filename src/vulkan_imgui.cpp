@@ -1,4 +1,5 @@
 #include "vulkan_imgui.h"
+#include "vulkan_descriptors.h"
 #include "imgui_impl_glfw.h"
 
 // glsl_shader.vert, compiled with:
@@ -290,9 +291,6 @@ static void CreateOrResizeBuffer(VkBuffer& buffer, VkDeviceMemory& buffer_memory
 	p_buffer_size = req.size;
 }
 
-
-
-
 static void ImGui_ImplVulkan_CreateFontSampler(VkDevice device, const VkAllocationCallbacks* allocator)
 {
 	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
@@ -314,6 +312,7 @@ static void ImGui_ImplVulkan_CreateFontSampler(VkDevice device, const VkAllocati
 	VkResult err = vkCreateSampler(device, &info, allocator, &bd->FontSampler);
 	check_vk_result(err);
 }
+
 static void ImGui_ImplVulkan_CreateDescriptorSetLayout(VkDevice device, const VkAllocationCallbacks* allocator)
 {
 	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
@@ -1192,44 +1191,6 @@ void ImGui_ImplVulkan_InitPlatformInterface()
 	platform_io.Renderer_SwapBuffers = ImGui_ImplVulkan_SwapBuffers;
 }
 
-
-// Register a texture
-// FIXME: This is experimental in the sense that we are unsure how to best design/tackle this problem, please post to https://github.com/ocornut/imgui/pull/914 if you have suggestions.
-VkDescriptorSet ImGui_ImplVulkan_AddTexture(VkSampler sampler, VkImageView image_view, VkImageLayout image_layout)
-{
-	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
-
-	// Create Descriptor Set:
-	VkDescriptorSet descriptor_set;
-	{
-		VkDescriptorSetAllocateInfo alloc_info = {};
-		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		alloc_info.descriptorPool = v->DescriptorPool;
-		alloc_info.descriptorSetCount = 1;
-		alloc_info.pSetLayouts = &bd->DescriptorSetLayout;
-		VkResult err = vkAllocateDescriptorSets(v->Device, &alloc_info, &descriptor_set);
-		check_vk_result(err);
-	}
-
-	// Update the Descriptor Set:
-	{
-		VkDescriptorImageInfo desc_image[1] = {};
-		desc_image[0].sampler = sampler;
-		desc_image[0].imageView = image_view;
-		desc_image[0].imageLayout = image_layout;
-		VkWriteDescriptorSet write_desc[1] = {};
-		write_desc[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		write_desc[0].dstSet = descriptor_set;
-		write_desc[0].descriptorCount = 1;
-		write_desc[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		write_desc[0].pImageInfo = desc_image;
-		vkUpdateDescriptorSets(v->Device, 1, write_desc, 0, NULL);
-	}
-	return descriptor_set;
-}
-
-
 // ***VulkanImgui***
 
 // Forward Declarations
@@ -1378,7 +1339,7 @@ void initImgui(VulkanEngine* vk,VulkanImgui_DeviceObjects& imObj) {
 		ImGui_ImplVulkan_InitPlatformInterface();
 
 	// Create the Descriptor Set for font:
-	bd->FontDescriptorSet = (VkDescriptorSet)ImGui_ImplVulkan_AddTexture(bd->FontSampler, bd->FontView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	bd->FontDescriptorSet = createSingleImageDecriptorSet(vk, imObj.descriptorPool,bd->DescriptorSetLayout, sImg);
 	io.Fonts->SetTexID((ImTextureID)bd->FontDescriptorSet);
 }
 
@@ -1422,9 +1383,9 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 	// **************** Command Pool ************************
 
 	VkCommandPoolCreateInfo commandPoolInfo = {};
-	commandPoolInfo .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	commandPoolInfo .queueFamilyIndex = bd.graphicsQueueFamily;
-	commandPoolInfo .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // Allow command buffers to be rerecorded 
+	commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	commandPoolInfo.queueFamilyIndex = bd.graphicsQueueFamily;
+	commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // Allow command buffers to be rerecorded 
 	//	individually, without this flag they all have to be reset together
 
 
