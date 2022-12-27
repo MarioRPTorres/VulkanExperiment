@@ -92,7 +92,7 @@ private:
 		createSurface();
 		pickPhysicalDevice();
 		createLogicalDevice();
-		createSwapChain();
+		createSwapChain(mainSurface);
 		createSwapChainImageViews();
 		createShaderToyRenderPass();
 
@@ -151,7 +151,7 @@ private:
 		if (enableValidationLayers) {
 			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 		}
-		vkDestroySurfaceKHR(instance, surface, nullptr);
+		vkDestroySurfaceKHR(instance, mainSurface, nullptr);
 		vkDestroyInstance(instance, nullptr);
 
 		glfwDestroyWindow(window);	// Cleanup Window Resources
@@ -195,7 +195,7 @@ private:
 		cleanupSwapChain();
 
 		// Recreate the swapchain
-		createSwapChain();
+		createSwapChain(mainSurface);
 		createSwapChainImageViews();
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createShaderToyRenderPass();
@@ -693,11 +693,10 @@ private:
 	}
 
 	void createShaderToyCommandPool() {
-		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
 		VkCommandPoolCreateInfo poolInfo = {};
 		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value;
+		poolInfo.queueFamilyIndex = graphicsFamily;
 		// Command Pool Flags
 		//• VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new 
 		//	commands very often(may change memory allocation behavior)
@@ -710,14 +709,14 @@ private:
 			throw std::runtime_error("failed to create command pool!");
 		}
 
-		if (queueFamilyIndices.sharedTransfer())
+		if (graphicsFamily == transferFamily)
 			transientcommandPool = commandPool;
 		else {
 			// Transfer Challenge & Transient Command Pool Challenge:
 			// Create a transient pool for short lived command buffers for memory allocation optimizations.
 			VkCommandPoolCreateInfo transientpoolInfo = {};
 			transientpoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-			transientpoolInfo.queueFamilyIndex = queueFamilyIndices.transferFamily.value;
+			transientpoolInfo.queueFamilyIndex = transferFamily;
 			transientpoolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
 			// Here there is a choice for the Allocator function

@@ -282,8 +282,8 @@ void VulkanEngine::createSurface() {
 	*/
 
 	// Here there is a choice for the Allocator function
-	if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create window surface!");
+	if (glfwCreateWindowSurface(instance, window, nullptr, &mainSurface) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create main window surface!");
 	}
 }
 
@@ -318,7 +318,7 @@ int VulkanEngine::rateDeviceSuitability(VkPhysicalDevice device) {
 }
 #endif
 
-SwapChainSupportDetails VulkanEngine::querySwapChainSupport(VkPhysicalDevice device) {
+SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
 	SwapChainSupportDetails details;
 
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -361,7 +361,7 @@ bool VulkanEngine::isDeviceSuitable(VkPhysicalDevice device) {
 	// for certains details to check if it is valid.
 	bool swapChainAdequate = false;
 	if (extensionsSupported) {
-		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device,mainSurface);
 		// For this tutorial is sufficient to have at least one supported Image format and one supported presentation mode
 		// for the given window surface.
 		swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
@@ -371,10 +371,10 @@ bool VulkanEngine::isDeviceSuitable(VkPhysicalDevice device) {
 	VkPhysicalDeviceFeatures supportedFeatures;
 	vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
-	return findQueueFamilies(device).isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
+	return findQueueFamilies(device,mainSurface).isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 }
 
-QueueFamilyIndices VulkanEngine::findQueueFamilies(VkPhysicalDevice device) {
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
 	QueueFamilyIndices indices;
 	optional transferFamilyIndice;
 
@@ -467,11 +467,14 @@ void VulkanEngine::pickPhysicalDevice() {
 void VulkanEngine::createLogicalDevice() {
 	// Logical devices don't interact directly with instances
 
-	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-
+	QueueFamilyIndices indices = findQueueFamilies(physicalDevice,mainSurface);
+	if (indices.graphicsFamily.has_value) graphicsFamily = indices.graphicsFamily.value; else throw std::runtime_error("failed to choose graphics queue family!");
+	if (indices.transferFamily.has_value) transferFamily = indices.transferFamily.value; else throw std::runtime_error("failed to choose transfer queue family!");
+	if (indices.presentFamily.has_value) mainPresentFamily = indices.presentFamily.value; else throw std::runtime_error("failed to choose main window present queue family!");
+	
 	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 	// Set of unique Queue Family index values. There is no repetition of indeces in a set.
-	std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value,indices.presentFamily.value,indices.transferFamily.value };
+	std::set<uint32_t> uniqueQueueFamilies = { graphicsFamily , mainPresentFamily, transferFamily };
 
 	float queuePriority = 1.0f;
 	// Loop over all necessary queueFamilies to create a vector of VkDeviceQueueCreationInfo
@@ -529,11 +532,11 @@ void VulkanEngine::createLogicalDevice() {
 		throw std::runtime_error("failed to create logical device!");
 	}
 
-	vkGetDeviceQueue(device, indices.graphicsFamily.value, 0, &graphicsQueue);
-	vkGetDeviceQueue(device, indices.presentFamily.value, 0, &presentQueue);
+	vkGetDeviceQueue(device, graphicsFamily, 0, &graphicsQueue);
+	vkGetDeviceQueue(device, mainPresentFamily, 0, &presentQueue);
 	// Transfer Challenge:
 	// Use a different queue family and queue specifically for transfer operations.
-	vkGetDeviceQueue(device, indices.transferFamily.value, 0, &transferQueue);
+	vkGetDeviceQueue(device, transferFamily, 0, &transferQueue);
 }
 
 VkSurfaceFormatKHR VulkanEngine::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
@@ -579,8 +582,8 @@ VkExtent2D VulkanEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabi
 	}
 }
 
-void VulkanEngine::createSwapChain() {
-	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+void VulkanEngine::createSwapChain(VkSurfaceKHR surface) {
+	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice,surface);
 
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 	VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
@@ -603,8 +606,8 @@ void VulkanEngine::createSwapChain() {
 
 	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value,indices.presentFamily.value };
+	QueueFamilyIndices indices = findQueueFamilies(physicalDevice,surface);
+	uint32_t queueFamilyIndices[] = { graphicsFamily,indices.presentFamily.value };
 
 	// Sharing Mode of images across queue families
 	//• VK_SHARING_MODE_EXCLUSIVE : An image is owned by one queue family
@@ -613,7 +616,7 @@ void VulkanEngine::createSwapChain() {
 	//• VK_SHARING_MODE_CONCURRENT : Images can be used across multiple queue
 	//	families without explicit ownership transfers.
 	// To avoid involving ownership concepts we choose Concurrent mode.
-	if (indices.graphicsFamily.value != indices.presentFamily.value) {
+	if ( graphicsFamily != indices.presentFamily.value) {
 		createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		createInfo.queueFamilyIndexCount = 2;
 		createInfo.pQueueFamilyIndices = queueFamilyIndices;
@@ -1109,11 +1112,10 @@ void VulkanEngine::createFramebuffers() {
 }
 
 void VulkanEngine::createCommandPool() {
-	QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
 	VkCommandPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value;
+	poolInfo.queueFamilyIndex = graphicsFamily;
 	// Command Pool Flags
 	//• VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new 
 	//	commands very often(may change memory allocation behavior)
@@ -1126,14 +1128,15 @@ void VulkanEngine::createCommandPool() {
 		throw std::runtime_error("failed to create command pool!");
 	}
 
-	if (queueFamilyIndices.sharedTransfer())
+	// If transfer family and graphics family are the same use the same command pool
+	if (graphicsFamily == transferFamily)
 		transientcommandPool = commandPool;
 	else {
 		// Transfer Challenge & Transient Command Pool Challenge:
 		// Create a transient pool for short lived command buffers for memory allocation optimizations.
 		VkCommandPoolCreateInfo transientpoolInfo = {};
 		transientpoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		transientpoolInfo.queueFamilyIndex = queueFamilyIndices.transferFamily.value;
+		transientpoolInfo.queueFamilyIndex = transferFamily;
 		transientpoolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
 		// Here there is a choice for the Allocator function
@@ -1354,9 +1357,8 @@ void VulkanEngine::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	// the different queue families that will be using the buffer. The former option offers better performance.
 	// In this function, I differentiate between using different and single queue families by specifying 
 	// th VK_BUFFER_USAGE_TRANSFER_DST_BIT flag or not, respectively.
-	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-	if ((usage & VK_BUFFER_USAGE_TRANSFER_DST_BIT) && (indices.graphicsFamily.value != indices.transferFamily.value)) {
-		uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value,indices.transferFamily.value };
+	if ((usage & VK_BUFFER_USAGE_TRANSFER_DST_BIT) && (graphicsFamily != transferFamily)) {
+		uint32_t queueFamilyIndices[] = { graphicsFamily,transferFamily };
 		bufferInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
 		bufferInfo.queueFamilyIndexCount = 2;
 		bufferInfo.pQueueFamilyIndices = queueFamilyIndices;
@@ -1671,20 +1673,19 @@ void VulkanEngine::createSampledImage(SampledImage& image, int cols, int rows, i
 
 void VulkanEngine::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
 
-	QueueFamilyIndices ind = findQueueFamilies(physicalDevice);
 	VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
 	VkImageMemoryBarrier barrier = {};
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	barrier.oldLayout = oldLayout;
 	barrier.newLayout = newLayout;
-	if (ind.sharedTransfer()) {
+	if (graphicsFamily == transferFamily) {
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	}
 	else {
-		barrier.srcQueueFamilyIndex = ind.transferFamily.value;
-		barrier.dstQueueFamilyIndex = ind.graphicsFamily.value;
+		barrier.srcQueueFamilyIndex = transferFamily;
+		barrier.dstQueueFamilyIndex = graphicsFamily;
 	}
 	barrier.image = image;
 	barrier.subresourceRange.baseMipLevel = 0;

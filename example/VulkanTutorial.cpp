@@ -50,13 +50,6 @@ const std::array<std::string, MAX_SAMPLED_IMAGES> updatedTextures = { "textures/
 std::vector<uint32_t> indices = {};
 std::vector<Vertex> vertices = {};
 
-void imguiBuildUI() {
-	VKEngine_Imgui_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
-	ImGui::ShowDemoWindow();
-	ImGui::Render();
-}
 
 void compileShaders() {
 	// TO DO: Add dynamic location of vulkan installation 
@@ -204,7 +197,7 @@ private:
 		createSurface();
 		pickPhysicalDevice();
 		createLogicalDevice();
-		createSwapChain();
+		createSwapChain(mainSurface);
 		createSwapChainImageViews();
 		if (enableImgui) {
 			createImguiDeviceObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
@@ -242,7 +235,13 @@ private:
 		while (!glfwWindowShouldClose(window)) {
 			glfwPollEvents();
 
-			if (enableImgui) imguiBuildUI();
+			if (enableImgui) {
+				VKEngine_Imgui_NewFrame();
+				ImGui_ImplGlfw_NewFrame();
+				ImGui::NewFrame();
+				ImGui::ShowDemoWindow();
+				ImGui::Render();
+			}
 			drawFrame();
 
 			// Update and Render additional Platform Windows
@@ -306,7 +305,7 @@ private:
 		if (enableValidationLayers) {
 			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 		}
-		vkDestroySurfaceKHR(instance, surface, nullptr);
+		vkDestroySurfaceKHR(instance, mainSurface, nullptr);
 		vkDestroyInstance(instance, nullptr);
 
 		glfwDestroyWindow(window);	// Cleanup Window Resources
@@ -366,7 +365,7 @@ private:
 		cleanupSwapChain();
 
 		// Recreate the swapchain
-		createSwapChain();
+		createSwapChain(mainSurface);
 		createSwapChainImageViews();
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createRenderPass();

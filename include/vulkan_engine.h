@@ -123,6 +123,10 @@ void char2shaderCode(std::vector<char> inCharVector, shaderCode& outShaderCode);
 
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);
+
+SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
+
 // ***************************** Vulkan Engine Class ****************************
 // ******************************************************************************
 
@@ -140,10 +144,13 @@ protected:
 	VkDebugUtilsMessengerEXT debugMessenger;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	VkDevice device;
+	uint32_t graphicsFamily; // Graphics queue family
+	uint32_t transferFamily; // Transfer queue family
+	uint32_t mainPresentFamily; // Main Window Present Family queue family
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
 	VkQueue transferQueue;
-	VkSurfaceKHR surface;
+	VkSurfaceKHR mainSurface;
 	VkSwapchainKHR swapChain;
 	std::vector<VkImage> swapChainImages;
 	VkFormat swapChainImageFormat;
@@ -188,9 +195,7 @@ protected:
 	void setupDebugMessenger();
 	void createSurface();
 	int rateDeviceSuitability(VkPhysicalDevice device);
-	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 	bool isDeviceSuitable(VkPhysicalDevice device);
-	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 	void pickPhysicalDevice();
 	void createLogicalDevice();
 
@@ -198,7 +203,6 @@ protected:
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-	void createSwapChain();
 	void createSwapChainImageViews();
 	void createRenderPass();
 	void createDescriptorSetLayout();
@@ -240,6 +244,7 @@ protected:
 
 
 public:
+	void createSwapChain(VkSurfaceKHR surface);
 	VkShaderModule createShaderModule(const shaderCode& code);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
 	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
@@ -253,13 +258,12 @@ public:
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 	
 	VulkanBackEndData getBackEndData() {
-		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 		VulkanBackEndData bd = {
 			window,
 			instance,
 			physicalDevice,
 			device,
-			queueFamilyIndices.graphicsFamily.value,
+			graphicsFamily,
 			graphicsQueue,
 			transferQueue
 		};
@@ -268,7 +272,7 @@ public:
 	}
 
 	SwapChainDetails getSwapChainDetails() {
-		SwapChainSupportDetails sc = querySwapChainSupport(physicalDevice);
+		SwapChainSupportDetails sc = querySwapChainSupport(physicalDevice,mainSurface);
 		SwapChainDetails details = {
 			sc.capabilities.minImageCount,
 			static_cast<uint32_t> (swapChainImages.size()),
