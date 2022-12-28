@@ -106,7 +106,7 @@ private:
 		char2shaderCode(readFile(fs), frag);
 		createGraphicsPipeline(vert, frag);
 		createShaderToyCommandPool();
-		createFramebuffers();
+		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain);
 		createCommandBuffers();
 		// Write the command buffers after the descriptor sets are updated
 		//writeCommandBuffers();
@@ -200,35 +200,10 @@ private:
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createShaderToyRenderPass();
 		createGraphicsPipeline(vert, frag);
-		createFramebuffers();
+		swapChainFramebuffers = createFramebuffers(renderPass, mainSwapChain);
 		createCommandBuffers();
 		//writeCommandBuffers();
 	}
-
-	void createFramebuffers() {
-		swapChainFramebuffers.resize(swapChainImageViews.size());
-
-		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-			std::array<VkImageView, 1> attachments = {
-				swapChainImageViews[i]
-			};
-
-			VkFramebufferCreateInfo framebufferInfo = {};
-			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferInfo.renderPass = renderPass;
-			framebufferInfo.attachmentCount = static_cast<uint32_t> (attachments.size());
-			framebufferInfo.pAttachments = attachments.data();
-			framebufferInfo.width = swapChainExtent.width;
-			framebufferInfo.height = swapChainExtent.height;
-			framebufferInfo.layers = 1;
-
-			// Here there is a choice for the Allocator function
-			if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create framebuffer!");
-			}
-		}
-	}
-
 
 	void drawFrame() {
 		// The vkWaitForFences function takes an array of fences and waits for either

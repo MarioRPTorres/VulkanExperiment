@@ -1087,8 +1087,8 @@ void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag, vert
 	vkDestroyShaderModule(device, vertShaderModule, nullptr);
 }
 
-std::vector<VkFramebuffer> VulkanEngine::createFramebuffers(const std::vector<VkImageView>& swapChainImageViews,const VkExtent2D swapChainExtent, VkImageView colorAttachment, VkImageView depthAttachment) {
-	std::vector<VkFramebuffer> frameBuffers(swapChainImageViews.size(),VK_NULL_HANDLE);
+std::vector<VkFramebuffer> VulkanEngine::createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment, VkImageView depthAttachment) {
+	std::vector<VkFramebuffer> frameBuffers(swapChain.imageViews.size(),VK_NULL_HANDLE);
 	std::vector<VkImageView> attachments;
 	if (colorAttachment) attachments.push_back(colorAttachment);
 	if (depthAttachment) attachments.push_back(depthAttachment);
@@ -1096,16 +1096,16 @@ std::vector<VkFramebuffer> VulkanEngine::createFramebuffers(const std::vector<Vk
 	attachments.push_back(VK_NULL_HANDLE);
 	uint32_t attachmentSize = static_cast<uint32_t> (attachments.size());
 
-	for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-		attachments[attachmentSize - 1] = swapChainImageViews[i];
+	for (size_t i = 0; i < swapChain.imageViews.size(); i++) {
+		attachments[attachmentSize - 1] = swapChain.imageViews[i];
 
 		VkFramebufferCreateInfo framebufferInfo = {};
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebufferInfo.renderPass = renderPass;
 		framebufferInfo.attachmentCount = attachmentSize;
 		framebufferInfo.pAttachments = attachments.data();
-		framebufferInfo.width = swapChainExtent.width;
-		framebufferInfo.height = swapChainExtent.height;
+		framebufferInfo.width = swapChain.extent.width;
+		framebufferInfo.height = swapChain.extent.height;
 		framebufferInfo.layers = 1;
 
 		// Here there is a choice for the Allocator function

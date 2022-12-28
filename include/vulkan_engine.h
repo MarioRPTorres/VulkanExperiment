@@ -248,7 +248,7 @@ protected:
 public:
 	void createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails);
 	void createSwapChainImageViews(const std::vector<VkImage>& images, const VkFormat format, std::vector<VkImageView>& swapChainImageViews);
-	std::vector<VkFramebuffer> createFramebuffers(const std::vector<VkImageView>& swapChainImageViews, const VkExtent2D swapChainExtent, VkImageView colorAttachment = VK_NULL_HANDLE, VkImageView depthAttachment = VK_NULL_HANDLE);
+	std::vector<VkFramebuffer> createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment = VK_NULL_HANDLE, VkImageView depthAttachment = VK_NULL_HANDLE);
 	VkShaderModule createShaderModule(const shaderCode& code);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
 	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);

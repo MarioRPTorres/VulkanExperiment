@@ -1193,7 +1193,6 @@ void ImGui_ImplVulkan_InitPlatformInterface()
 // Forward Declarations
 void createImguiRenderPass(VulkanImgui_DeviceObjects& imObj, VkFormat format,bool firstPass);
 void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapChainImageCount);
-void createImguiFrameBuffers(VulkanImgui_DeviceObjects& imObj, VkE_SwapChain* sc);
 
 void check_vk_result(VkResult err)
 {
@@ -1393,7 +1392,7 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 
 	createImguiCommandBuffers(imObj, sc->imageCount);
 	createImguiRenderPass(imObj, sc->format,info.firstPass);
-	createImguiFrameBuffers(imObj, sc);
+	imObj.frameBuffers = vk->createFramebuffers(imObj.renderPass, *sc);
 }
 
 void createImguiRenderPass(VulkanImgui_DeviceObjects& imObj, VkFormat format,bool firstPass) {
@@ -1462,30 +1461,6 @@ void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapCh
 		throw std::runtime_error("failed to allocate imgui command buffers!");
 	}
 }
-
-void createImguiFrameBuffers(VulkanImgui_DeviceObjects& imObj, VkE_SwapChain* sc) {
-	uint32_t imageCount = static_cast<uint32_t>(sc->imageViews.size());
-	imObj.frameBuffers.resize(imageCount);
-
-	for (int i = 0; i < imageCount; i++) {
-		VkImageView attachment = sc->imageViews[i];
-
-		VkFramebufferCreateInfo frameBufferInfo = {};
-		frameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		frameBufferInfo.renderPass = imObj.renderPass;
-		frameBufferInfo.attachmentCount = 1;
-		frameBufferInfo.pAttachments = &attachment;
-		frameBufferInfo.width = sc->extent.width;
-		frameBufferInfo.height = sc->extent.height;
-		frameBufferInfo.layers = 1;
-
-		// Here there is a choice for the Allocator function
-		if (vkCreateFramebuffer(imObj.device, &frameBufferInfo, nullptr, &imObj.frameBuffers[i]) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create imgui framebuffer!");
-		}
-	}
-}
-
 
 void ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(VkDevice device, const VkAllocationCallbacks* allocator)
 {
@@ -1582,5 +1557,5 @@ void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& 
 	ImGui_ImplVulkan_SetMinImageCount(sc->minImageCount);
 	createImguiCommandBuffers(imObj, sc->imageCount);
 	createImguiRenderPass(imObj, sc->format, info.firstPass);
-	createImguiFrameBuffers(imObj, sc);
+	imObj.frameBuffers = vk->createFramebuffers(imObj.renderPass,*sc);
 }
