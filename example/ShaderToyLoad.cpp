@@ -108,7 +108,7 @@ private:
 		createGraphicsPipeline(vert, frag);
 		createShaderToyCommandPool();
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain);
-		createCommandBuffers();
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		// Write the command buffers after the descriptor sets are updated
 		//writeCommandBuffers();
 		createSyncObjects();
@@ -203,7 +203,7 @@ private:
 		renderPass = createRenderPass(renderPassInfo);
 		createGraphicsPipeline(vert, frag);
 		swapChainFramebuffers = createFramebuffers(renderPass, mainSwapChain);
-		createCommandBuffers();
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		//writeCommandBuffers();
 	}
 

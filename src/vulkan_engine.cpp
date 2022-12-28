@@ -1172,8 +1172,9 @@ void VulkanEngine::createCommandPool() {
 	}
 }
 
-void VulkanEngine::createCommandBuffers() {
-	commandBuffers.resize(swapChainFramebuffers.size());
+std::vector<VkCommandBuffer> VulkanEngine::createCommandBuffers(const VkCommandPool commandPool,uint32_t buffersCount) {
+	
+	std::vector<VkCommandBuffer> commandBuffers(buffersCount, VK_NULL_HANDLE);
 
 	VkCommandBufferAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1186,7 +1187,7 @@ void VulkanEngine::createCommandBuffers() {
 	if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
 		throw std::runtime_error("failed to allocate command buffers!");
 	}
-
+	return commandBuffers;
 }
 
 void VulkanEngine::createSyncObjects() {

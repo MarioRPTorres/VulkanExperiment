@@ -221,7 +221,6 @@ protected:
 
 	// Various Resources
 	void createCommandPool();
-	void createCommandBuffers();
 	void createColorResources();
 	void createDepthResources();
 	void createSyncObjects();
@@ -258,6 +257,7 @@ public:
 	VkRenderPass createRenderPass(VkE_createRenderPassInfo info);
 	std::vector<VkFramebuffer> createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment = VK_NULL_HANDLE, VkImageView depthAttachment = VK_NULL_HANDLE);
 	VkShaderModule createShaderModule(const shaderCode& code);
+	std::vector<VkCommandBuffer> createCommandBuffers(const VkCommandPool commandPool, uint32_t buffersCount);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
 	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
 	void cleanupSampledImage(SampledImage& image);

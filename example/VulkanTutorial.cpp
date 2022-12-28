@@ -215,7 +215,7 @@ private:
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain,colorImageView, depthImageView);
 		vertexBuffer = createVertexBuffer((VulkanEngine*)this, vertices);
 		createIndexBuffer(indices);
-		createCommandBuffers();
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		createUniformBuffers();
 		createTexture(textureImages[0], textures[0]);
 		createTexture(updatedTextureImages[0], updatedTextures[0]);
@@ -381,7 +381,7 @@ private:
 		createDescriptorSets();
 		updateDescriptorSet(textureImages, 0);
 		updateDescriptorSet(updatedTextureImages, 1);
-		createCommandBuffers();
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		writeCommandBuffers();
 		if (enableImgui) {
 			recreateImguiSwapChainObjects((VulkanEngine*)this, imguiObjects, imguiInfo);

@@ -310,13 +310,15 @@ static void ImGui_ImplVulkan_CreateFontSampler(VkDevice device, const VkAllocati
 	check_vk_result(err);
 }
 
-static void ImGui_ImplVulkan_CreateDescriptorSetLayout(VkDevice device, const VkAllocationCallbacks* allocator)
+static void VkE_Imgui_CreateDescriptorSetLayout(VkDescriptorSetLayout& descriptorSetLayout)
 {
-	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-	if (bd->DescriptorSetLayout)
+	if (descriptorSetLayout)
 		return;
 
-	ImGui_ImplVulkan_CreateFontSampler(device, allocator);
+	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
+	VkDevice& device = bd->VulkanInitInfo.Device;
+	
+	ImGui_ImplVulkan_CreateFontSampler(device, bd->VulkanInitInfo.Allocator);
 	VkSampler sampler[1] = { bd->FontSampler };
 	VkDescriptorSetLayoutBinding binding[1] = {};
 	binding[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -327,18 +329,21 @@ static void ImGui_ImplVulkan_CreateDescriptorSetLayout(VkDevice device, const Vk
 	info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	info.bindingCount = 1;
 	info.pBindings = binding;
-	VkResult err = vkCreateDescriptorSetLayout(device, &info, allocator, &bd->DescriptorSetLayout);
+	VkResult err = vkCreateDescriptorSetLayout(device, &info, bd->VulkanInitInfo.Allocator, &descriptorSetLayout);
 	check_vk_result(err);
 }
 
-static void ImGui_ImplVulkan_CreatePipelineLayout(VkDevice device, const VkAllocationCallbacks* allocator)
+static void VkE_Imgui_CreatePipelineLayout(VkPipelineLayout& pipelineLayout)
 {
-	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-	if (bd->PipelineLayout)
+
+	if (pipelineLayout)
 		return;
 
+	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
+	VkDevice device = bd->VulkanInitInfo.Device;
+
 	// Constants: we are using 'vec2 offset' and 'vec2 scale' instead of a full 3d projection matrix
-	ImGui_ImplVulkan_CreateDescriptorSetLayout(device, allocator);
+	VkE_Imgui_CreateDescriptorSetLayout(bd->DescriptorSetLayout);
 	VkPushConstantRange push_constants[1] = {};
 	push_constants[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	push_constants[0].offset = sizeof(float) * 0;
@@ -350,11 +355,11 @@ static void ImGui_ImplVulkan_CreatePipelineLayout(VkDevice device, const VkAlloc
 	layout_info.pSetLayouts = set_layout;
 	layout_info.pushConstantRangeCount = 1;
 	layout_info.pPushConstantRanges = push_constants;
-	VkResult  err = vkCreatePipelineLayout(device, &layout_info, allocator, &bd->PipelineLayout);
+	VkResult  err = vkCreatePipelineLayout(device, &layout_info, bd->VulkanInitInfo.Allocator, &pipelineLayout);
 	check_vk_result(err);
 }
 
-static void ImGui_ImplVulkan_CreatePipeline(VulkanImgui_DeviceObjects& imObj, const VkAllocationCallbacks* allocator, VkPipelineCache pipelineCache, VkRenderPass renderPass, VkSampleCountFlagBits MSAASamples, VkPipeline* pipeline, uint32_t subpass)
+static void VkE_Imgui_CreatePipeline(VulkanImgui_DeviceObjects& imObj, VkPipelineCache pipelineCache, VkRenderPass renderPass, VkPipeline* pipeline)
 {
 	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
 
@@ -431,13 +436,14 @@ static void ImGui_ImplVulkan_CreatePipeline(VulkanImgui_DeviceObjects& imObj, co
 	blend_info.attachmentCount = 1;
 	blend_info.pAttachments = color_attachment;
 
+	// Viewport and scissor are dynamic states which means they are specified at draw time
 	VkDynamicState dynamic_states[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 	VkPipelineDynamicStateCreateInfo dynamic_state = {};
 	dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 	dynamic_state.dynamicStateCount = (uint32_t)IM_ARRAYSIZE(dynamic_states);
 	dynamic_state.pDynamicStates = dynamic_states;
 
-	ImGui_ImplVulkan_CreatePipelineLayout(imObj.device, allocator);
+	VkE_Imgui_CreatePipelineLayout(bd->PipelineLayout);
 
 	VkGraphicsPipelineCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -454,8 +460,8 @@ static void ImGui_ImplVulkan_CreatePipeline(VulkanImgui_DeviceObjects& imObj, co
 	info.pDynamicState = &dynamic_state;
 	info.layout = bd->PipelineLayout;
 	info.renderPass = renderPass;
-	info.subpass = subpass;
-	VkResult err = vkCreateGraphicsPipelines(imObj.device, pipelineCache, 1, &info, allocator, pipeline);
+	info.subpass = 0;
+	VkResult err = vkCreateGraphicsPipelines(imObj.device, pipelineCache, 1, &info, bd->VulkanInitInfo.Allocator, pipeline);
 	check_vk_result(err);
 }
 
@@ -1190,8 +1196,6 @@ void ImGui_ImplVulkan_InitPlatformInterface()
 
 // ***VulkanImgui***
 
-// Forward Declarations
-void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapChainImageCount);
 
 void check_vk_result(VkResult err)
 {
@@ -1284,47 +1288,13 @@ void initImgui(VulkanEngine* vk,VulkanImgui_DeviceObjects& imObj) {
 	
 	// Create core objects
 	//ImGui_ImplVulkan_CreateDeviceObjects(vk,bd);
-	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
-	VkResult err;
 
-	if (!bd->DescriptorSetLayout)
-	{
-		VkSampler sampler[1] = { bd->FontSampler };
-		VkDescriptorSetLayoutBinding binding[1] = {};
-		binding[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		binding[0].descriptorCount = 1;
-		binding[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-		binding[0].pImmutableSamplers = sampler;
-		VkDescriptorSetLayoutCreateInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		info.bindingCount = 1;
-		info.pBindings = binding;
-		err = vkCreateDescriptorSetLayout(v->Device, &info, v->Allocator, &bd->DescriptorSetLayout);
-		check_vk_result(err);
-	}
-
-	if (!bd->PipelineLayout)
-	{
-		// Constants: we are using 'vec2 offset' and 'vec2 scale' instead of a full 3d projection matrix
-		VkPushConstantRange push_constants[1] = {};
-		push_constants[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-		push_constants[0].offset = sizeof(float) * 0;
-		push_constants[0].size = sizeof(float) * 4;
-		VkDescriptorSetLayout set_layout[1] = { bd->DescriptorSetLayout };
-		VkPipelineLayoutCreateInfo layout_info = {};
-		layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		layout_info.setLayoutCount = 1;
-		layout_info.pSetLayouts = set_layout;
-		layout_info.pushConstantRangeCount = 1;
-		layout_info.pPushConstantRanges = push_constants;
-		err = vkCreatePipelineLayout(v->Device, &layout_info, v->Allocator, &bd->PipelineLayout);
-		check_vk_result(err);
-	}
+	VkE_Imgui_CreateDescriptorSetLayout(bd->DescriptorSetLayout);
+	VkE_Imgui_CreatePipelineLayout(bd->PipelineLayout);
 
 	if (!imObj.ShaderModuleVert) imObj.ShaderModuleVert = vk->createShaderModule(__glsl_shader_vert_spv);
 	if (!imObj.ShaderModuleFrag) imObj.ShaderModuleFrag = vk->createShaderModule(__glsl_shader_frag_spv);
-	ImGui_ImplVulkan_CreatePipeline(imObj, v->Allocator, v->PipelineCache, bd->RenderPass, v->MSAASamples, &bd->Pipeline, bd->Subpass);
-
+	VkE_Imgui_CreatePipeline(imObj,  init_info.PipelineCache, bd->RenderPass, &bd->Pipeline);
 
 	// Our render function expect RendererUserData to be storing the window render buffer we need (for the main viewport we won't use ->Window)
 	ImGuiViewport* main_viewport = ImGui::GetMainViewport();
@@ -1389,7 +1359,7 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 		throw std::runtime_error("failed to create command pool!");
 	}
 
-	createImguiCommandBuffers(imObj, sc->imageCount);
+	imObj.commandBuffers = vk->createCommandBuffers(imObj.commandPool, sc->imageCount);
 	VkE_createRenderPassInfo renderPassInfo = { sc->format, VK_SAMPLE_COUNT_1_BIT , false, true};
 	imObj.renderPass = vk->createRenderPass(renderPassInfo);
 	imObj.frameBuffers = vk->createFramebuffers(imObj.renderPass, *sc);
@@ -1505,7 +1475,7 @@ void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& 
 	VkE_SwapChain* sc = vk->getSwapChainDetails();
 	
 	ImGui_ImplVulkan_SetMinImageCount(sc->minImageCount);
-	createImguiCommandBuffers(imObj, sc->imageCount);
+	imObj.commandBuffers = vk->createCommandBuffers(imObj.commandPool, sc->imageCount);
 	VkE_createRenderPassInfo renderPassInfo = { sc->format, VK_SAMPLE_COUNT_1_BIT , false, true };
 	imObj.renderPass = vk->createRenderPass(renderPassInfo);
 	imObj.frameBuffers = vk->createFramebuffers(imObj.renderPass,*sc);
