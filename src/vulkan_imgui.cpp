@@ -1365,23 +1365,6 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 	imObj.frameBuffers = vk->createFramebuffers(imObj.renderPass, *sc);
 }
 
-void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapChainImageCount) {
-	// **************** Command Buffers ************************
-
-	imObj.commandBuffers.resize(swapChainImageCount);
-	VkCommandBufferAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.commandPool = imObj.commandPool;
-	//• VK_COMMAND_BUFFER_LEVEL_PRIMARY : Can be submitted to a queue for execution, but cannot be called from other command buffers.
-	//• VK_COMMAND_BUFFER_LEVEL_SECONDARY : Cannot be submitted directly, but can be called from primary command buffers.
-	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandBufferCount = (uint32_t)imObj.commandBuffers.size();
-
-	if (vkAllocateCommandBuffers(imObj.device, &allocInfo, imObj.commandBuffers.data()) != VK_SUCCESS) {
-		throw std::runtime_error("failed to allocate imgui command buffers!");
-	}
-}
-
 void ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(VkDevice device, const VkAllocationCallbacks* allocator)
 {
 	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
