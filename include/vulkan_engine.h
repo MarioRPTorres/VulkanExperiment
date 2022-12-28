@@ -112,6 +112,14 @@ struct VkE_SwapChain {
 	std::vector<VkImageView> imageViews; // missing
 };
 
+struct VkE_createRenderPassInfo {
+	VkFormat format;
+	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+	bool firstPass = true;
+	bool finalPass = true;
+	bool depthStencil = false;
+};
+
 struct BufferBundle {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
@@ -207,7 +215,6 @@ protected:
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-	void createRenderPass();
 	void createDescriptorSetLayout();
 	// For creating the graphics pipeline
 	void createGraphicsPipeline(shaderCode vert, shaderCode frag, vertexDescriptions vertex);
@@ -248,6 +255,7 @@ protected:
 public:
 	void createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails);
 	void createSwapChainImageViews(const std::vector<VkImage>& images, const VkFormat format, std::vector<VkImageView>& swapChainImageViews);
+	VkRenderPass createRenderPass(VkE_createRenderPassInfo info);
 	std::vector<VkFramebuffer> createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment = VK_NULL_HANDLE, VkImageView depthAttachment = VK_NULL_HANDLE);
 	VkShaderModule createShaderModule(const shaderCode& code);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);

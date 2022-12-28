@@ -1191,7 +1191,6 @@ void ImGui_ImplVulkan_InitPlatformInterface()
 // ***VulkanImgui***
 
 // Forward Declarations
-void createImguiRenderPass(VulkanImgui_DeviceObjects& imObj, VkFormat format,bool firstPass);
 void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapChainImageCount);
 
 void check_vk_result(VkResult err)
@@ -1391,58 +1390,9 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 	}
 
 	createImguiCommandBuffers(imObj, sc->imageCount);
-	createImguiRenderPass(imObj, sc->format,info.firstPass);
+	VkE_createRenderPassInfo renderPassInfo = { sc->format, VK_SAMPLE_COUNT_1_BIT , false, true};
+	imObj.renderPass = vk->createRenderPass(renderPassInfo);
 	imObj.frameBuffers = vk->createFramebuffers(imObj.renderPass, *sc);
-}
-
-void createImguiRenderPass(VulkanImgui_DeviceObjects& imObj, VkFormat format,bool firstPass) {
-	
-	// ****************  Imgui Render Pass **************
-	// Color Attachment creation
-	VkAttachmentDescription imguiColorAttachment = {};
-	imguiColorAttachment.format = format;
-	imguiColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // msaa can be resolved in previous renderpass and imgui doesn't need it
-	imguiColorAttachment.loadOp = (firstPass ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD); // Whether we want to keep what is already in the framebuffers and draw over it the imgui widgets
-	imguiColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	imguiColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	imguiColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	imguiColorAttachment.initialLayout = (firstPass ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	imguiColorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-	// Reference to point to the attachment in the attachment array
-	VkAttachmentReference imguiColorAttachmentRef = {};
-	imguiColorAttachmentRef.attachment = 0;
-	imguiColorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-	// Create first subpass with one attachment
-	VkSubpassDescription imGuiSubpass = {};
-	imGuiSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	imGuiSubpass.colorAttachmentCount = 1;
-	imGuiSubpass.pColorAttachments = &imguiColorAttachmentRef;
-
-	// Create dependency to synchronize this subpass with the penultimate renderpass
-	VkSubpassDependency imguiDependency = {};
-	imguiDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-	imguiDependency.dstSubpass = 0;
-	imguiDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	imguiDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	imguiDependency.srcAccessMask = 0;  // or VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	imguiDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-	// Create the Render pass with arguments of the subpasses used and the attachments to refer to.
-	VkRenderPassCreateInfo imguiRenderPassInfo = {};
-	imguiRenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	imguiRenderPassInfo.attachmentCount = 1;
-	imguiRenderPassInfo.pAttachments = &imguiColorAttachment;
-	imguiRenderPassInfo.subpassCount = 1;
-	imguiRenderPassInfo.pSubpasses = &imGuiSubpass;
-	imguiRenderPassInfo.dependencyCount = 1;
-	imguiRenderPassInfo.pDependencies = &imguiDependency;
-
-	// Here there is a choice for the Allocator function
-	if (vkCreateRenderPass(imObj.device, &imguiRenderPassInfo, nullptr, &imObj.renderPass) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create imgui render pass!");
-	}
 }
 
 void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapChainImageCount) {
@@ -1556,6 +1506,7 @@ void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& 
 	
 	ImGui_ImplVulkan_SetMinImageCount(sc->minImageCount);
 	createImguiCommandBuffers(imObj, sc->imageCount);
-	createImguiRenderPass(imObj, sc->format, info.firstPass);
+	VkE_createRenderPassInfo renderPassInfo = { sc->format, VK_SAMPLE_COUNT_1_BIT , false, true };
+	imObj.renderPass = vk->createRenderPass(renderPassInfo);
 	imObj.frameBuffers = vk->createFramebuffers(imObj.renderPass,*sc);
 }

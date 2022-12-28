@@ -672,15 +672,17 @@ void VulkanEngine::createSwapChainImageViews(const std::vector<VkImage>& images,
 	}
 }
 
-void VulkanEngine::createRenderPass() {
+VkRenderPass VulkanEngine::createRenderPass(VkE_createRenderPassInfo info) {
+	bool multipleSamples = info.msaaSamples > VK_SAMPLE_COUNT_1_BIT;
+
 	// Color Attachment creation
 	VkAttachmentDescription colorAttachment = {};
-	colorAttachment.format = swapChainImageFormat;
-	colorAttachment.samples = msaaSamples;
+	colorAttachment.format = info.format;
+	colorAttachment.samples = info.msaaSamples;
 	//• VK_ATTACHMENT_LOAD_OP_DONT_CARE : Existing contents are undefined;
 	//• VK_ATTACHMENT_LOAD_OP_LOAD : Preserve the existing contents of the attachment
 	//• VK_ATTACHMENT_LOAD_OP_CLEAR : Clear the values to a constant at the	start
-	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	colorAttachment.loadOp = (info.firstPass ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD); // Whether we want to keep what is already in the framebuffers
 	//• VK_ATTACHMENT_STORE_OP_DONT_CARE: Contents of the framebuffer will be undefined after the rendering operation
 	//• VK_ATTACHMENT_STORE_OP_STORE : Rendered contents will be stored in memory and can be read later
 	//We’re interested in seeing the rendered triangle on the screen, so we’re going with the store operation here.
@@ -692,46 +694,63 @@ void VulkanEngine::createRenderPass() {
 	//• VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : Images used as color attachment
 	//• VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : Images to be presented in the swap chain
 	//• VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : Images to be used as destination for a memory copy operation
-	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // Without msaa would be VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	colorAttachment.initialLayout = (info.firstPass ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	// Without msaa there is no need for more color attachment
+	colorAttachment.finalLayout = (multipleSamples || !info.finalPass ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR); 
 
 	// Reference to point to the attachment in the attachment array
 	VkAttachmentReference colorAttachmentRef = {};
 	colorAttachmentRef.attachment = 0;
 	colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	
+	// Attachments to submit
+	std::vector<VkAttachmentDescription> attachments = { colorAttachment };
 
+	// Depth Stencil
+	VkAttachmentReference* pDepthAttachmentRef = nullptr;
+	if (info.depthStencil) {
+		// Depth Attachment creation
+		VkAttachmentDescription depthAttachment = {};
+		depthAttachment.format = findDepthFormat();
+		depthAttachment.samples = info.msaaSamples;
+		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	
+		attachments.push_back(depthAttachment);
 
-	// Depth Attachment creation
-	VkAttachmentDescription depthAttachment = {};
-	depthAttachment.format = findDepthFormat();
-	depthAttachment.samples = msaaSamples;
-	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		VkAttachmentReference depthAttachmentRef = {};
+		depthAttachmentRef.attachment = 1;
+		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		pDepthAttachmentRef = &depthAttachmentRef;
+	}
 
-	VkAttachmentReference depthAttachmentRef = {};
-	depthAttachmentRef.attachment = 1;
-	depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	// Color resolve for multiple samples
+	VkAttachmentReference* pColorAttachmentResolveRef = nullptr;
+	if ( multipleSamples ) {
+		// Color Resolve Attachment creation
+		VkAttachmentDescription colorAttachmentResolve = {};
+		colorAttachmentResolve.format = info.format;
+		colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		colorAttachmentResolve.finalLayout = info.finalPass ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+		attachments.push_back(colorAttachmentResolve);
 
-	// Color Resolve Attachment creation
-	VkAttachmentDescription colorAttachmentResolve = {};
-	colorAttachmentResolve.format = swapChainImageFormat;
-	colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
-	colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		// Reference to point to the attachment in the attachment array
+		VkAttachmentReference colorAttachmentResolveRef = {};
+		colorAttachmentResolveRef.attachment = 2;
+		colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-	// Reference to point to the attachment in the attachment array
-	VkAttachmentReference colorAttachmentResolveRef = {};
-	colorAttachmentResolveRef.attachment = 2;
-	colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		pColorAttachmentResolveRef = &colorAttachmentResolveRef;
+	}
 
 
 
@@ -740,16 +759,16 @@ void VulkanEngine::createRenderPass() {
 	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	subpass.colorAttachmentCount = 1;
 	subpass.pColorAttachments = &colorAttachmentRef;
-	subpass.pDepthStencilAttachment = &depthAttachmentRef;
-	subpass.pResolveAttachments = &colorAttachmentResolveRef;
+	subpass.pDepthStencilAttachment = pDepthAttachmentRef;
+	subpass.pResolveAttachments = pColorAttachmentResolveRef;
 
 	//The following other types of attachments can be referenced by a subpass :
 	//• pInputAttachments : Attachments that are read from a shader
-	//• pResolveAttachments : Attachments used for multisampling color attachments
 	//• pDepthStencilAttachment : Attachment for depth and stencil data
+	//• pResolveAttachments : Attachments used for multisampling color attachments
 	//• pPreserveAttachments : Attachments that are not used by this subpass,	but for which the data must be preserved
 
-	std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
+
 	// Create the Render pass with arguments of the subpasses used and the attachments to refer to.
 	VkRenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -775,11 +794,13 @@ void VulkanEngine::createRenderPass() {
 	renderPassInfo.dependencyCount = 1;
 	renderPassInfo.pDependencies = &dependency;
 
+	VkRenderPass renderPass;
 	// Here there is a choice for the Allocator function
 	if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create render pass!");
 	}
 
+	return renderPass;
 }
 
 void VulkanEngine::createDescriptorSetLayout() {
