@@ -582,7 +582,7 @@ VkExtent2D VulkanEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabi
 	}
 }
 
-void VulkanEngine::createSwapChain(VkSurfaceKHR surface) {
+void VulkanEngine::createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails) {
 	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice,surface);
 
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
@@ -644,7 +644,7 @@ void VulkanEngine::createSwapChain(VkSurfaceKHR surface) {
 	createInfo.oldSwapchain = VK_NULL_HANDLE;
 
 	// Here there is a choice for the Allocator function
-	if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
+	if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChainDetails.swapChain) != VK_SUCCESS) {
 		throw std::runtime_error("Failed to create swap chain!");
 	}
 	else {
@@ -653,20 +653,22 @@ void VulkanEngine::createSwapChain(VkSurfaceKHR surface) {
 
 	// Get the swap chain image handles. We only specified the minimum Image necessary for the swap chain so we 
 	// still need to query it for the number of images;
-	vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
-	swapChainImages.resize(imageCount);
-	vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
+	vkGetSwapchainImagesKHR(device, swapChainDetails.swapChain, &swapChainDetails.imageCount, nullptr);
+	swapChainDetails.images.resize(swapChainDetails.imageCount);
+	vkGetSwapchainImagesKHR(device, swapChainDetails.swapChain, &swapChainDetails.imageCount, swapChainDetails.images.data());
 
-	swapChainImageFormat = surfaceFormat.format;
-	swapChainExtent = extent;
+	swapChainDetails.minImageCount = swapChainSupport.capabilities.minImageCount;
+	swapChainDetails.format = surfaceFormat.format;
+	swapChainDetails.extent = extent;
 
 }
 
-void VulkanEngine::createSwapChainImageViews() {
-	swapChainImageViews.resize(swapChainImages.size());
+void VulkanEngine::createSwapChainImageViews(const std::vector<VkImage>& images,const VkFormat format,std::vector<VkImageView>& swapChainImageViews) {
+	
+	swapChainImageViews.resize(images.size());
 
-	for (size_t i = 0; i < swapChainImages.size(); i++) {
-		swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+	for (size_t i = 0; i < images.size(); i++) {
+		swapChainImageViews[i] = createImageView(images[i], format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
 }
 
@@ -1085,8 +1087,8 @@ void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag, vert
 	vkDestroyShaderModule(device, vertShaderModule, nullptr);
 }
 
-void VulkanEngine::createFramebuffers() {
-	swapChainFramebuffers.resize(swapChainImageViews.size());
+void VulkanEngine::createFramebuffers(const std::vector<VkImageView>& swapChainImageViews,const VkExtent2D swapChainExtent, std::vector<VkFramebuffer>& frameBuffers) {
+	frameBuffers.resize(swapChainImageViews.size());
 
 	for (size_t i = 0; i < swapChainImageViews.size(); i++) {
 		std::array<VkImageView, 3> attachments = {
@@ -1105,7 +1107,7 @@ void VulkanEngine::createFramebuffers() {
 		framebufferInfo.layers = 1;
 
 		// Here there is a choice for the Allocator function
-		if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+		if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &frameBuffers[i]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create framebuffer!");
 		}
 	}
@@ -1234,17 +1236,17 @@ void VulkanEngine::createDescriptorPool() {
 	std::array<VkDescriptorPoolSize, 2> poolSizes = {};
 	// Pool for uniform buffer
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * MIRROR_DESCRIPTOR_SET_COUNT);
+	poolSizes[0].descriptorCount = static_cast<uint32_t>(mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
 
 	// Pool for combined image sampler
 	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT);
+	poolSizes[1].descriptorCount = static_cast<uint32_t>(mainSwapChain.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT);
 
 	VkDescriptorPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
 	poolInfo.pPoolSizes = poolSizes.data();
-	poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size() * MIRROR_DESCRIPTOR_SET_COUNT);
+	poolInfo.maxSets = static_cast<uint32_t>(mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
 	//The structure has an optional flag similar to command pools that determines if
 	//	individual descriptor sets can be freed or not: VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT.
 	//	We’re not going to touch the descriptor set after creating it, so we don’t need
@@ -1257,15 +1259,15 @@ void VulkanEngine::createDescriptorPool() {
 }
 
 void VulkanEngine::createDescriptorSets() {
-	std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), descriptorSetLayout);
+	std::vector<VkDescriptorSetLayout> layouts(mainSwapChain.imageCount, descriptorSetLayout);
 	VkDescriptorSetAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	allocInfo.descriptorPool = descriptorPool;
-	allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
+	allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
 	allocInfo.pSetLayouts = layouts.data();
 
 	for (int i = 0; i < MIRROR_DESCRIPTOR_SET_COUNT; i++) {
-		descriptorSets[i].resize(swapChainImages.size());
+		descriptorSets[i].resize(layouts.size());
 
 		if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets[i].data()) != VK_SUCCESS) {
 			throw std::runtime_error("failed to allocate descriptor sets!");

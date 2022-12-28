@@ -223,9 +223,6 @@ struct ImGui_ImplVulkan_Data
 	VkImageView                 FontView;
 	VkDescriptorSet             FontDescriptorSet;
 
-	// Render buffers for main window
-	ImGui_ImplVulkanH_WindowRenderBuffers MainWindowRenderBuffers;
-
 	ImGui_ImplVulkan_Data()
 	{
 		memset((void*)this, 0, sizeof(*this));
@@ -1196,7 +1193,7 @@ void ImGui_ImplVulkan_InitPlatformInterface()
 // Forward Declarations
 void createImguiRenderPass(VulkanImgui_DeviceObjects& imObj, VkFormat format,bool firstPass);
 void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapChainImageCount);
-void createImguiFrameBuffers(VulkanImgui_DeviceObjects& imObj, SwapChainDetails sc);
+void createImguiFrameBuffers(VulkanImgui_DeviceObjects& imObj, VkE_SwapChain* sc);
 
 void check_vk_result(VkResult err)
 {
@@ -1209,7 +1206,7 @@ void check_vk_result(VkResult err)
 
 void initImgui(VulkanEngine* vk,VulkanImgui_DeviceObjects& imObj) {
 	VulkanBackEndData backend = vk->getBackEndData();
-	SwapChainDetails sc = vk->getSwapChainDetails();
+	VkE_SwapChain* sc = vk->getSwapChainDetails();
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -1245,8 +1242,8 @@ void initImgui(VulkanEngine* vk,VulkanImgui_DeviceObjects& imObj) {
 	init_info.PipelineCache = VK_NULL_HANDLE;
 	init_info.DescriptorPool = imObj.descriptorPool;
 	init_info.Allocator = nullptr;
-	init_info.MinImageCount = sc.minImageCount;
-	init_info.ImageCount = sc.imageCount;
+	init_info.MinImageCount = sc->minImageCount;
+	init_info.ImageCount = sc->imageCount;
 	init_info.CheckVkResultFn = check_vk_result;
 
 	//IM_ASSERT(g_FunctionsLoaded && "Need to call ImGui_ImplVulkan_LoadFunctions() if IMGUI_IMPL_VULKAN_NO_PROTOTYPES or VK_NO_PROTOTYPES are set!");
@@ -1345,7 +1342,7 @@ void initImgui(VulkanEngine* vk,VulkanImgui_DeviceObjects& imObj) {
 
 void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj, VulkanImgui_DeviceObjectsInfo info) {
 	VulkanBackEndData bd = vk->getBackEndData();
-	SwapChainDetails sc = vk->getSwapChainDetails();
+	VkE_SwapChain* sc = vk->getSwapChainDetails();
 
 	imObj.device = bd.device;
 
@@ -1394,8 +1391,8 @@ void createImguiDeviceObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj
 		throw std::runtime_error("failed to create command pool!");
 	}
 
-	createImguiCommandBuffers(imObj, sc.imageCount);
-	createImguiRenderPass(imObj, sc.format,info.firstPass);
+	createImguiCommandBuffers(imObj, sc->imageCount);
+	createImguiRenderPass(imObj, sc->format,info.firstPass);
 	createImguiFrameBuffers(imObj, sc);
 }
 
@@ -1466,20 +1463,20 @@ void createImguiCommandBuffers(VulkanImgui_DeviceObjects& imObj, uint32_t swapCh
 	}
 }
 
-void createImguiFrameBuffers(VulkanImgui_DeviceObjects& imObj, SwapChainDetails sc) {
-	uint32_t imageCount = static_cast<uint32_t>(sc.imageViews.size());
+void createImguiFrameBuffers(VulkanImgui_DeviceObjects& imObj, VkE_SwapChain* sc) {
+	uint32_t imageCount = static_cast<uint32_t>(sc->imageViews.size());
 	imObj.frameBuffers.resize(imageCount);
 
 	for (int i = 0; i < imageCount; i++) {
-		VkImageView attachment = sc.imageViews[i];
+		VkImageView attachment = sc->imageViews[i];
 
 		VkFramebufferCreateInfo frameBufferInfo = {};
 		frameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		frameBufferInfo.renderPass = imObj.renderPass;
 		frameBufferInfo.attachmentCount = 1;
 		frameBufferInfo.pAttachments = &attachment;
-		frameBufferInfo.width = sc.extent.width;
-		frameBufferInfo.height = sc.extent.height;
+		frameBufferInfo.width = sc->extent.width;
+		frameBufferInfo.height = sc->extent.height;
 		frameBufferInfo.layers = 1;
 
 		// Here there is a choice for the Allocator function
@@ -1580,10 +1577,10 @@ void cleanupImguiSwapChainObjects(VulkanImgui_DeviceObjects& imObj) {
 
 void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj, VulkanImgui_DeviceObjectsInfo info) {
 	VulkanBackEndData bd = vk->getBackEndData();
-	SwapChainDetails sc = vk->getSwapChainDetails();
+	VkE_SwapChain* sc = vk->getSwapChainDetails();
 	
-	ImGui_ImplVulkan_SetMinImageCount(sc.minImageCount);
-	createImguiCommandBuffers(imObj, sc.imageCount);
-	createImguiRenderPass(imObj, sc.format, info.firstPass);
+	ImGui_ImplVulkan_SetMinImageCount(sc->minImageCount);
+	createImguiCommandBuffers(imObj, sc->imageCount);
+	createImguiRenderPass(imObj, sc->format, info.firstPass);
 	createImguiFrameBuffers(imObj, sc);
 }

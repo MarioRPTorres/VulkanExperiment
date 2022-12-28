@@ -22,6 +22,8 @@
 #include <map>
 #endif
 
+#include "assert.h"
+#define VKE_ASSERT(_EXPR)            assert(_EXPR)
 
 // ****************** Constants ********************
 // Number of frames to be processed concurrently(simultaneously)
@@ -100,12 +102,14 @@ struct VulkanBackEndData {
 	VkQueue transientQueue;
 };
 
-struct SwapChainDetails {
+struct VkE_SwapChain {
+	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
 	uint32_t minImageCount;
 	uint32_t imageCount;
 	VkFormat format;
 	VkExtent2D extent;
-	std::vector<VkImageView> imageViews;
+	std::vector<VkImage> images;
+	std::vector<VkImageView> imageViews; // missing
 };
 
 struct BufferBundle {
@@ -151,11 +155,12 @@ protected:
 	VkQueue presentQueue;
 	VkQueue transferQueue;
 	VkSurfaceKHR mainSurface;
-	VkSwapchainKHR swapChain;
-	std::vector<VkImage> swapChainImages;
-	VkFormat swapChainImageFormat;
-	VkExtent2D swapChainExtent;
-	std::vector<VkImageView> swapChainImageViews;
+	VkE_SwapChain mainSwapChain;
+	VkSwapchainKHR& swapChain = mainSwapChain.swapChain;
+	std::vector<VkImage>& swapChainImages = mainSwapChain.images;
+	std::vector<VkImageView>& swapChainImageViews = mainSwapChain.imageViews;
+	VkFormat& swapChainImageFormat = mainSwapChain.format;
+	VkExtent2D& swapChainExtent = mainSwapChain.extent;
 	VkRenderPass renderPass;
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
@@ -171,7 +176,6 @@ protected:
 	size_t currentFrame = 0;
 	VkDescriptorPool descriptorPool;
 	std::array<std::vector<VkDescriptorSet>, MIRROR_DESCRIPTOR_SET_COUNT> descriptorSets;
-	int descriptorGroup = 0;
 	VkImage depthImage;
 	VkDeviceMemory depthImageMemory;
 	VkImageView depthImageView;
@@ -203,7 +207,6 @@ protected:
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-	void createSwapChainImageViews();
 	void createRenderPass();
 	void createDescriptorSetLayout();
 	// For creating the graphics pipeline
@@ -214,7 +217,6 @@ protected:
 	void createCommandBuffers();
 	void createColorResources();
 	void createDepthResources();
-	void createFramebuffers();
 	void createSyncObjects();
 
 	void createIndexBuffer(std::vector<uint32_t> indices);
@@ -244,7 +246,9 @@ protected:
 
 
 public:
-	void createSwapChain(VkSurfaceKHR surface);
+	void createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails);
+	void createSwapChainImageViews(const std::vector<VkImage>& images, const VkFormat format, std::vector<VkImageView>& swapChainImageViews);
+	void createFramebuffers(const std::vector<VkImageView>& swapChainImageViews, const VkExtent2D swapChainExtent, std::vector<VkFramebuffer>& frameBuffers);
 	VkShaderModule createShaderModule(const shaderCode& code);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
 	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
@@ -271,18 +275,7 @@ public:
 		return bd;
 	}
 
-	SwapChainDetails getSwapChainDetails() {
-		SwapChainSupportDetails sc = querySwapChainSupport(physicalDevice,mainSurface);
-		SwapChainDetails details = {
-			sc.capabilities.minImageCount,
-			static_cast<uint32_t> (swapChainImages.size()),
-			swapChainImageFormat,
-			sc.capabilities.currentExtent,
-			swapChainImageViews
-		};
-
-		return details;
-	}
+	inline VkE_SwapChain* getSwapChainDetails() { return &mainSwapChain; }
 
 };
 

@@ -92,8 +92,8 @@ private:
 		createSurface();
 		pickPhysicalDevice();
 		createLogicalDevice();
-		createSwapChain(mainSurface);
-		createSwapChainImageViews();
+		createSwapChain(mainSurface,mainSwapChain);
+		createSwapChainImageViews(swapChainImages,swapChainImageFormat,swapChainImageViews);
 		createShaderToyRenderPass();
 
 		std::string vs = "./";
@@ -195,8 +195,8 @@ private:
 		cleanupSwapChain();
 
 		// Recreate the swapchain
-		createSwapChain(mainSurface);
-		createSwapChainImageViews();
+		createSwapChain(mainSurface, mainSwapChain);
+		createSwapChainImageViews(swapChainImages, swapChainImageFormat, swapChainImageViews);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createShaderToyRenderPass();
 		createGraphicsPipeline(vert, frag);

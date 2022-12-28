@@ -166,6 +166,7 @@ private:
 
 	uint32_t imageIndex;
 	bool swapChainOutdated = false;
+	int descriptorGroup = 0;
 
 	void initWindow() {
 		// Initiates the GLFW library
@@ -197,8 +198,8 @@ private:
 		createSurface();
 		pickPhysicalDevice();
 		createLogicalDevice();
-		createSwapChain(mainSurface);
-		createSwapChainImageViews();
+		createSwapChain(mainSurface,mainSwapChain);
+		createSwapChainImageViews(swapChainImages, swapChainImageFormat,swapChainImageViews);
 		if (enableImgui) {
 			createImguiDeviceObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
 		} 
@@ -210,7 +211,7 @@ private:
 		createCommandPool();
 		createColorResources();
 		createDepthResources();
-		createFramebuffers();
+		createFramebuffers(swapChainImageViews,swapChainExtent, swapChainFramebuffers);
 		vertexBuffer = createVertexBuffer((VulkanEngine*)this, vertices);
 		createIndexBuffer(indices);
 		createCommandBuffers();
@@ -339,7 +340,7 @@ private:
 		}
 		vkDestroySwapchainKHR(device, swapChain, nullptr);
 
-		for (size_t i = 0; i < swapChainImages.size(); i++) {
+		for (size_t i = 0; i < uniformBuffers.size(); i++) {
 			destroyBufferBundle(uniformBuffers[i]);
 		}
 
@@ -365,15 +366,15 @@ private:
 		cleanupSwapChain();
 
 		// Recreate the swapchain
-		createSwapChain(mainSurface);
-		createSwapChainImageViews();
+		createSwapChain(mainSurface,mainSwapChain);
+		createSwapChainImageViews(swapChainImages, swapChainImageFormat, swapChainImageViews);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createRenderPass();
 		createDescriptorPool();
 		createGraphicsPipeline(vert,frag, Vertex::getDescriptions());
 		createColorResources();
 		createDepthResources();
-		createFramebuffers();
+		createFramebuffers(swapChainImageViews, swapChainExtent, swapChainFramebuffers);
 		createUniformBuffers();
 		createDescriptorSets();
 		updateDescriptorSet(textureImages, 0);
@@ -388,9 +389,9 @@ private:
 	void createUniformBuffers() {
 		VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
-		uniformBuffers.resize(swapChainImages.size());
+		uniformBuffers.resize(mainSwapChain.imageCount);
 
-		for (size_t i = 0; i < swapChainImages.size(); i++) {
+		for (size_t i = 0; i < mainSwapChain.imageCount; i++) {
 			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i].buffer,
 				uniformBuffers[i].memory);
@@ -426,7 +427,7 @@ private:
 
 
 		std::vector<VkDescriptorSet>& descriptorSet = descriptorSets[groupIndex];
-		for (size_t i = 0; i < swapChainImages.size(); i++) {
+		for (size_t i = 0; i < mainSwapChain.imageCount; i++) {
 			VkDescriptorBufferInfo bufferInfo = {};
 			bufferInfo.buffer = uniformBuffers[i].buffer;
 			bufferInfo.offset = 0;
