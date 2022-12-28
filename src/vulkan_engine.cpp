@@ -1087,20 +1087,22 @@ void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag, vert
 	vkDestroyShaderModule(device, vertShaderModule, nullptr);
 }
 
-void VulkanEngine::createFramebuffers(const std::vector<VkImageView>& swapChainImageViews,const VkExtent2D swapChainExtent, std::vector<VkFramebuffer>& frameBuffers) {
-	frameBuffers.resize(swapChainImageViews.size());
+std::vector<VkFramebuffer> VulkanEngine::createFramebuffers(const std::vector<VkImageView>& swapChainImageViews,const VkExtent2D swapChainExtent, VkImageView colorAttachment, VkImageView depthAttachment) {
+	std::vector<VkFramebuffer> frameBuffers(swapChainImageViews.size(),VK_NULL_HANDLE);
+	std::vector<VkImageView> attachments;
+	if (colorAttachment) attachments.push_back(colorAttachment);
+	if (depthAttachment) attachments.push_back(depthAttachment);
+
+	attachments.push_back(VK_NULL_HANDLE);
+	uint32_t attachmentSize = static_cast<uint32_t> (attachments.size());
 
 	for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-		std::array<VkImageView, 3> attachments = {
-			colorImageView,
-			depthImageView,
-			swapChainImageViews[i],
-		};
+		attachments[attachmentSize - 1] = swapChainImageViews[i];
 
 		VkFramebufferCreateInfo framebufferInfo = {};
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebufferInfo.renderPass = renderPass;
-		framebufferInfo.attachmentCount = static_cast<uint32_t> (attachments.size());
+		framebufferInfo.attachmentCount = attachmentSize;
 		framebufferInfo.pAttachments = attachments.data();
 		framebufferInfo.width = swapChainExtent.width;
 		framebufferInfo.height = swapChainExtent.height;
@@ -1111,6 +1113,7 @@ void VulkanEngine::createFramebuffers(const std::vector<VkImageView>& swapChainI
 			throw std::runtime_error("failed to create framebuffer!");
 		}
 	}
+	return frameBuffers;
 }
 
 void VulkanEngine::createCommandPool() {

@@ -211,7 +211,7 @@ private:
 		createCommandPool();
 		createColorResources();
 		createDepthResources();
-		createFramebuffers(swapChainImageViews,swapChainExtent, swapChainFramebuffers);
+		swapChainFramebuffers = createFramebuffers(swapChainImageViews,swapChainExtent,colorImageView, depthImageView);
 		vertexBuffer = createVertexBuffer((VulkanEngine*)this, vertices);
 		createIndexBuffer(indices);
 		createCommandBuffers();
@@ -374,7 +374,7 @@ private:
 		createGraphicsPipeline(vert,frag, Vertex::getDescriptions());
 		createColorResources();
 		createDepthResources();
-		createFramebuffers(swapChainImageViews, swapChainExtent, swapChainFramebuffers);
+		swapChainFramebuffers = createFramebuffers(swapChainImageViews, swapChainExtent, colorImageView, depthImageView);
 		createUniformBuffers();
 		createDescriptorSets();
 		updateDescriptorSet(textureImages, 0);
