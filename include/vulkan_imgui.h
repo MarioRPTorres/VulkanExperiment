@@ -28,6 +28,6 @@ void cleanupImguiObjects(VulkanImgui_DeviceObjects& imObj);
 void cleanupImguiSwapChainObjects(VulkanImgui_DeviceObjects& imObj);
 void recreateImguiSwapChainObjects(VulkanEngine* vk, VulkanImgui_DeviceObjects& imObj, VulkanImgui_DeviceObjectsInfo info);
 
-void VKEngine_Imgui_NewFrame();
+void VkE_Imgui_NewFrame();
 void VKEngine_Imgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline = VK_NULL_HANDLE);
 #endif

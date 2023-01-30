@@ -1190,14 +1190,14 @@ std::vector<VkCommandBuffer> VulkanEngine::createCommandBuffers(const VkCommandP
 	return commandBuffers;
 }
 
-void VulkanEngine::createSyncObjects() {
+void VulkanEngine::createSyncObjects(VkE_FrameSyncObjects& syncObjs,uint32_t imagesCount) {
 	// Create synchronization objects to control the flow of work both on gpu and from cpu to gpu.
 	// The semaphores tell the gpu when to wait to start the action. 
 	// The fences control when the cpu can submit more work to the gpu based on wether the gpu is done with the frame selected.
-	imageAvailableSemaphore.resize(MAX_FRAME_IN_FLIGHT);
-	renderFinishedSemaphore.resize(MAX_FRAME_IN_FLIGHT);
-	inFlightFences.resize(MAX_FRAME_IN_FLIGHT);
-	imagesInFlight.resize(swapChainImages.size(), VK_NULL_HANDLE);
+	syncObjs.imageAvailableSemaphore.resize(MAX_FRAME_IN_FLIGHT);
+	syncObjs.renderFinishedSemaphore.resize(MAX_FRAME_IN_FLIGHT);
+	syncObjs.inFlightFences.resize(MAX_FRAME_IN_FLIGHT);
+	syncObjs.imagesInFlight.resize(imagesCount, VK_NULL_HANDLE);
 
 	VkSemaphoreCreateInfo semaphoreInfo = {};
 	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -1209,9 +1209,9 @@ void VulkanEngine::createSyncObjects() {
 
 	for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
 		// Here there is a choice for the Allocator function
-		if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore[i]) != VK_SUCCESS ||
-			vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphore[i]) != VK_SUCCESS ||
-			vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+		if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &syncObjs.imageAvailableSemaphore[i]) != VK_SUCCESS ||
+			vkCreateSemaphore(device, &semaphoreInfo, nullptr, &syncObjs.renderFinishedSemaphore[i]) != VK_SUCCESS ||
+			vkCreateFence(device, &fenceInfo, nullptr, &syncObjs.inFlightFences[i]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create synchronization objects for a frame!");
 		}
 	}
@@ -1901,6 +1901,31 @@ void VulkanEngine::freeDescriptorSet(VkDescriptorPool pool,VkDescriptorSet& set)
 	vkFreeDescriptorSets(device, pool, 1, &set);
 	set = VK_NULL_HANDLE;
 };
+
+
+BufferBundle VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage) {
+	BufferBundle vertexBuffer;
+
+	// Create a host visible buffer
+	BufferBundle stagingBuffer;
+	createBuffer(bufferSize,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		stagingBuffer.buffer,
+		stagingBuffer.memory);
+
+	mapBufferMemory(stagingBuffer.memory, data, bufferSize);
+
+	createBuffer(bufferSize,
+	VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
+	VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer.buffer,
+	vertexBuffer.memory);
+	copyBuffer(stagingBuffer.buffer, vertexBuffer.buffer, bufferSize);
+
+	destroyBufferBundle(stagingBuffer);
+
+	return vertexBuffer;
+}
 
 //void VulkanEngine::createTextureImage() {
 //	int texWidth, texHeight, texChannels;

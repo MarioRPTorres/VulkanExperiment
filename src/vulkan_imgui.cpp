@@ -247,8 +247,7 @@ static uint32_t ImGui_ImplVulkan_MemoryType(VkMemoryPropertyFlags properties, ui
 	return 0xFFFFFFFF; // Unable to find memoryType
 }
 
-void VKEngine_Imgui_NewFrame()
-{
+void VkE_Imgui_NewFrame() {
 	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
 	IM_ASSERT(bd != NULL && "Did you call ImGui_ImplVulkan_Init()?");
 	IM_UNUSED(bd);
@@ -532,7 +531,6 @@ VkPresentModeKHR ImGui_ImplVulkanH_SelectPresentMode(VkPhysicalDevice physical_d
 
 	return VK_PRESENT_MODE_FIFO_KHR; // Always available
 }
-
 
 void ImGui_ImplVulkanH_DestroyFrame(VkDevice device, ImGui_ImplVulkanH_Frame* fd, const VkAllocationCallbacks* allocator)
 {
@@ -1081,6 +1079,7 @@ void VKEngine_Imgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer comman
 	VkRect2D scissor = { { 0, 0 }, { (uint32_t)fb_width, (uint32_t)fb_height } };
 	vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 }
+
 static void ImGui_ImplVulkan_RenderWindow(ImGuiViewport* viewport, void*)
 {
 	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();

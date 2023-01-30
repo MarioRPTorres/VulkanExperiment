@@ -100,6 +100,7 @@ struct VulkanBackEndData {
 	uint32_t graphicsQueueFamily;
 	VkQueue graphicsQueue;
 	VkQueue transientQueue;
+	VkCommandPool commandPool;
 };
 
 struct VkE_SwapChain {
@@ -110,6 +111,13 @@ struct VkE_SwapChain {
 	VkExtent2D extent;
 	std::vector<VkImage> images;
 	std::vector<VkImageView> imageViews; // missing
+};
+
+struct VkE_FrameSyncObjects {
+	std::vector<VkSemaphore> imageAvailableSemaphore;
+	std::vector<VkSemaphore> renderFinishedSemaphore;
+	std::vector<VkFence> inFlightFences;
+	std::vector<VkFence> imagesInFlight;
 };
 
 struct VkE_createRenderPassInfo {
@@ -163,12 +171,14 @@ protected:
 	VkQueue presentQueue;
 	VkQueue transferQueue;
 	VkSurfaceKHR mainSurface;
+
 	VkE_SwapChain mainSwapChain;
 	VkSwapchainKHR& swapChain = mainSwapChain.swapChain;
 	std::vector<VkImage>& swapChainImages = mainSwapChain.images;
 	std::vector<VkImageView>& swapChainImageViews = mainSwapChain.imageViews;
 	VkFormat& swapChainImageFormat = mainSwapChain.format;
 	VkExtent2D& swapChainExtent = mainSwapChain.extent;
+
 	VkRenderPass renderPass;
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
@@ -177,10 +187,13 @@ protected:
 	VkCommandPool commandPool;
 	VkCommandPool transientcommandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
-	std::vector<VkSemaphore> imageAvailableSemaphore;
-	std::vector<VkSemaphore> renderFinishedSemaphore;
-	std::vector<VkFence> inFlightFences;
-	std::vector<VkFence> imagesInFlight;
+
+	VkE_FrameSyncObjects syncObjects;
+	std::vector<VkSemaphore>& imageAvailableSemaphore = syncObjects.imageAvailableSemaphore;
+	std::vector<VkSemaphore>& renderFinishedSemaphore = syncObjects.renderFinishedSemaphore;
+	std::vector<VkFence>& inFlightFences = syncObjects.inFlightFences;
+	std::vector<VkFence>& imagesInFlight = syncObjects.imagesInFlight;
+
 	size_t currentFrame = 0;
 	VkDescriptorPool descriptorPool;
 	std::array<std::vector<VkDescriptorSet>, MIRROR_DESCRIPTOR_SET_COUNT> descriptorSets;
@@ -223,7 +236,6 @@ protected:
 	void createCommandPool();
 	void createColorResources();
 	void createDepthResources();
-	void createSyncObjects();
 
 	void createIndexBuffer(std::vector<uint32_t> indices);
 
@@ -242,7 +254,6 @@ protected:
 		VkMemoryPropertyFlags properties, VkImage& image,
 		VkDeviceMemory& imageMemory);
 	VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
-	void createImageSampler(VkSampler& sampler, uint32_t mipLevels);
 	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
 	void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
 	
@@ -259,6 +270,7 @@ public:
 	VkShaderModule createShaderModule(const shaderCode& code);
 	std::vector<VkCommandBuffer> createCommandBuffers(const VkCommandPool commandPool, uint32_t buffersCount);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
+	void createImageSampler(VkSampler& sampler, uint32_t mipLevels);
 	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
 	void cleanupSampledImage(SampledImage& image);
 	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
@@ -268,7 +280,9 @@ public:
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	VkCommandBuffer beginSingleTimeCommands();
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
-	
+	void createSyncObjects(VkE_FrameSyncObjects& syncObjs, uint32_t imagesCount);
+	BufferBundle VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage);
+
 	VulkanBackEndData getBackEndData() {
 		VulkanBackEndData bd = {
 			window,
@@ -277,7 +291,8 @@ public:
 			device,
 			graphicsFamily,
 			graphicsQueue,
-			transferQueue
+			transferQueue,
+			commandPool
 		};
 
 		return bd;

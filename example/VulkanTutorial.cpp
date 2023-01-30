@@ -228,7 +228,7 @@ private:
 		updateDescriptorSet(updatedTextureImages, 1);
 		// Write the command buffers after the descriptor sets are updated
 		writeCommandBuffers();
-		createSyncObjects();
+		createSyncObjects(syncObjects,mainSwapChain.imageCount);
 	}
 
 	void mainLoop() {
@@ -238,7 +238,7 @@ private:
 			glfwPollEvents();
 
 			if (enableImgui) {
-				VKEngine_Imgui_NewFrame();
+				VkE_Imgui_NewFrame();
 				ImGui_ImplGlfw_NewFrame();
 				ImGui::NewFrame();
 				ImGui::ShowDemoWindow();
