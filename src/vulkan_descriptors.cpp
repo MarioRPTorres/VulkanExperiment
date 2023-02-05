@@ -1,6 +1,6 @@
 #include "vulkan_descriptors.h"
 
-VkDescriptorSet createSingleImageDecriptorSet(VulkanEngine* vk, VkDescriptorPool pool,VkDescriptorSetLayout layout, SampledImage image) {
+VkDescriptorSet createSingleImageDecriptorSet(VulkanEngine* vk, VkDescriptorPool pool,VkDescriptorSetLayout layout, VkE_Image image) {
     VulkanBackEndData bd = vk->getBackEndData();
 
     // Create Descriptor Set:

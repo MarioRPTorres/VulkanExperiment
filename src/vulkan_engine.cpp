@@ -183,7 +183,7 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
 //**************************** VulkanEngine ****************************
 //**********************************************************************
 
-void VulkanEngine::cleanupSampledImage(SampledImage& image) {
+void VulkanEngine::cleanupSampledImage(VkE_Image& image) {
 	if (image.sampler != VK_NULL_HANDLE) vkDestroySampler(device, image.sampler, nullptr);
 	if (image.view != VK_NULL_HANDLE) vkDestroyImageView(device, image.view, nullptr);
 	if (image.image != VK_NULL_HANDLE) vkDestroyImage(device, image.image, nullptr);
@@ -1137,38 +1137,21 @@ std::vector<VkFramebuffer> VulkanEngine::createFramebuffers(const VkRenderPass r
 	return frameBuffers;
 }
 
-void VulkanEngine::createCommandPool() {
+void VulkanEngine::createCommandPool(VkCommandPool& pool, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags) {
 
 	VkCommandPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	poolInfo.queueFamilyIndex = graphicsFamily;
+	poolInfo.queueFamilyIndex = queueFamilyIndex;
 	// Command Pool Flags
 	//• VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new 
 	//	commands very often(may change memory allocation behavior)
 	//• VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : Allow command buffers to be rerecorded 
 	//	individually, without this flag they all have to be reset together
-	poolInfo.flags = 0; // Optional
+	poolInfo.flags = flags; // Optional
 
 	// Here there is a choice for the Allocator function
-	if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+	if (vkCreateCommandPool(device, &poolInfo, nullptr, &pool) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create command pool!");
-	}
-
-	// If transfer family and graphics family are the same use the same command pool
-	if (graphicsFamily == transferFamily)
-		transientcommandPool = commandPool;
-	else {
-		// Transfer Challenge & Transient Command Pool Challenge:
-		// Create a transient pool for short lived command buffers for memory allocation optimizations.
-		VkCommandPoolCreateInfo transientpoolInfo = {};
-		transientpoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		transientpoolInfo.queueFamilyIndex = transferFamily;
-		transientpoolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-
-		// Here there is a choice for the Allocator function
-		if (vkCreateCommandPool(device, &transientpoolInfo, nullptr, &transientcommandPool) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create transient command pool!");
-		}
 	}
 }
 
@@ -1650,7 +1633,7 @@ void VulkanEngine::createImageSampler(VkSampler& sampler, uint32_t mipLevels) {
 	}
 }
 
-void VulkanEngine::createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData,uint32_t mipLvls, VkSampleCountFlagBits numsamples) {
+void VulkanEngine::createSampledImage(VkE_Image& image, int cols, int rows, int elemSize, char* imageData,uint32_t mipLvls, VkSampleCountFlagBits numsamples) {
 	VkDeviceSize imageSize = rows*cols * elemSize;
 
 

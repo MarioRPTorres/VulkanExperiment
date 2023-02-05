@@ -158,8 +158,8 @@ private:
 	shaderCode frag;
 	BufferBundle vertexBuffer;
 	std::vector<BufferBundle> uniformBuffers;
-	std::array<SampledImage, MAX_SAMPLED_IMAGES> textureImages;
-	std::array<SampledImage, MAX_SAMPLED_IMAGES> updatedTextureImages;
+	std::array<VkE_Image, MAX_SAMPLED_IMAGES> textureImages;
+	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
 	VulkanImgui_DeviceObjects imguiObjects;
 	VulkanImgui_DeviceObjectsInfo imguiInfo = { false };
@@ -209,7 +209,15 @@ private:
 		char2shaderCode(readFile("./vert.spv"),vert);
 		char2shaderCode(readFile("./frag.spv"),frag);
 		createGraphicsPipeline(vert, frag, Vertex::getDescriptions());
-		createCommandPool();
+		createCommandPool(commandPool,graphicsFamily,0);
+		// If transfer family and graphics family are the same use the same command pool
+		if (graphicsFamily == transferFamily)
+			transientcommandPool = commandPool;
+		else {
+			// Transfer Challenge & Transient Command Pool Challenge:
+			// Create a transient pool for short lived command buffers for memory allocation optimizations.
+			createCommandPool(transientcommandPool, transferFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+		}
 		createColorResources();
 		createDepthResources();
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain,colorImageView, depthImageView);
@@ -425,7 +433,7 @@ private:
 
 	}
 
-	void updateDescriptorSet(std::array<SampledImage, MAX_SAMPLED_IMAGES> images, int groupIndex) {
+	void updateDescriptorSet(std::array<VkE_Image, MAX_SAMPLED_IMAGES> images, int groupIndex) {
 
 
 		std::vector<VkDescriptorSet>& descriptorSet = descriptorSets[groupIndex];
@@ -627,7 +635,7 @@ private:
 		currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 	}
 
-	void createTexture(SampledImage& image, std::string imageFile){
+	void createTexture(VkE_Image& image, std::string imageFile){
 		cv::Mat matImage = loadImage(imageFile);
 
 		createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(),(char*) matImage.data, mipLevels, VK_SAMPLE_COUNT_1_BIT);

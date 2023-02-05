@@ -50,12 +50,12 @@ const std::vector<const char*> deviceExtensions = {
 // ****************** Datatypes ********************
 typedef std::vector<uint32_t> shaderCode;
 
-typedef struct _SampledImage {
+typedef struct _VkE_Image {
 	VkImage image = VK_NULL_HANDLE;
 	VkDeviceMemory memory = VK_NULL_HANDLE;
 	VkImageView view = VK_NULL_HANDLE;
 	VkSampler sampler = VK_NULL_HANDLE;
-} SampledImage;
+} VkE_Image;
 
 
 struct optional {
@@ -233,7 +233,6 @@ protected:
 	void createGraphicsPipeline(shaderCode vert, shaderCode frag, vertexDescriptions vertex);
 
 	// Various Resources
-	void createCommandPool();
 	void createColorResources();
 	void createDepthResources();
 
@@ -271,8 +270,8 @@ public:
 	std::vector<VkCommandBuffer> createCommandBuffers(const VkCommandPool commandPool, uint32_t buffersCount);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
 	void createImageSampler(VkSampler& sampler, uint32_t mipLevels);
-	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
-	void cleanupSampledImage(SampledImage& image);
+	void createSampledImage(VkE_Image& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
+	void cleanupSampledImage(VkE_Image& image);
 	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
 	void destroyBufferBundle(BufferBundle buffer);
 	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
@@ -282,6 +281,7 @@ public:
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 	void createSyncObjects(VkE_FrameSyncObjects& syncObjs, uint32_t imagesCount);
 	BufferBundle VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage);
+	void createCommandPool(VkCommandPool& pool, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags);
 
 	VulkanBackEndData getBackEndData() {
 		VulkanBackEndData bd = {
