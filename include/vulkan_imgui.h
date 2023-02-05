@@ -32,7 +32,7 @@ struct VkEImgui_Backend {
 	BufferBundle vertexBuffer;
 	BufferBundle indexBuffer;
 	// Viewports
-	std::vector<VKEngine_Imgui_Viewport> viewports = {};
+//	std::vector<VKEngine_Imgui_Viewport> viewports = {};
 
 	VkEImgui_Backend()
 	{
