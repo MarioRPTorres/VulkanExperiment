@@ -149,7 +149,7 @@ public:
 		mipLevels = 3;
 		initWindow();
 		initVulkan();
-		if (enableImgui) initImgui((VulkanEngine*)this,imguiObjects);
+		if (enableImgui) VkEImgui_init((VulkanEngine*)this, imGuiBackEnd);
 		mainLoop();
 		cleanup();
 	}
@@ -161,8 +161,8 @@ private:
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
-	VulkanImgui_DeviceObjects imguiObjects;
-	VulkanImgui_DeviceObjectsInfo imguiInfo = { false };
+	VkEImgui_Backend imGuiBackEnd;
+	VkEImgui_DeviceObjectsInfo imguiInfo = { false };
 
 	uint32_t imageIndex;
 	bool swapChainOutdated = false;
@@ -201,7 +201,9 @@ private:
 		createSwapChain(mainSurface,mainSwapChain);
 		createSwapChainImageViews(swapChainImages, swapChainImageFormat,swapChainImageViews);
 		if (enableImgui) {
-			createImguiDeviceObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
+			VkEImgui_setupBackEnd(imGuiBackEnd, (VulkanEngine*)this, mainSwapChain.minImageCount, mainSwapChain.imageCount);
+			VkEImgui_createBackendObjects((VulkanEngine*) this, imGuiBackEnd,imguiInfo);
+			//createImguiDeviceObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
 		} 
 		VkE_createRenderPassInfo renderPassInfo = { mainSwapChain.format,msaaSamples,true,!enableImgui,true };
 		renderPass = createRenderPass(renderPassInfo);
@@ -307,7 +309,7 @@ private:
 		
 		if (enableImgui) {
 			// Resources to destroy when the program ends
-			cleanupImguiObjects(imguiObjects);
+			cleanupImguiObjects(imGuiBackEnd);
 		}
 
 		vkDestroyDevice(device, nullptr);
@@ -341,7 +343,7 @@ private:
 		vkDestroyRenderPass(device, renderPass, nullptr);
 
 		if (enableImgui) {
-			cleanupImguiSwapChainObjects(imguiObjects);
+			cleanupImguiSwapChainObjects(imGuiBackEnd);
 		}
 
 		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
@@ -392,7 +394,7 @@ private:
 		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		writeCommandBuffers();
 		if (enableImgui) {
-			recreateImguiSwapChainObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
+			recreateImguiSwapChainObjects(imGuiBackEnd, imguiInfo);
 		}
 	}
 
@@ -530,33 +532,33 @@ private:
 		std::vector<VkCommandBuffer> submitCommmandBuffers = { commandBuffers[imageIndex] };
 		VkResult err;
 		if (enableImgui) {
-			err = vkResetCommandBuffer(imguiObjects.commandBuffers[imageIndex], 0);
+			err = vkResetCommandBuffer(imGuiBackEnd.commandBuffers[imageIndex], 0);
 			check_vk_result(err);
 			VkCommandBufferBeginInfo info = {};
 			info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 			info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-			err = vkBeginCommandBuffer(imguiObjects.commandBuffers[imageIndex], &info);
+			err = vkBeginCommandBuffer(imGuiBackEnd.commandBuffers[imageIndex], &info);
 			check_vk_result(err);
 
 			VkClearValue clearValue = { 0.0f,0.0f ,0.0f ,0.0f };
 			VkRenderPassBeginInfo imguiRenderPassBeginInfo = {};
 			imguiRenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			imguiRenderPassBeginInfo.renderPass = imguiObjects.renderPass;
-			imguiRenderPassBeginInfo.framebuffer = imguiObjects.frameBuffers[imageIndex];
+			imguiRenderPassBeginInfo.renderPass = imGuiBackEnd.renderPass;
+			imguiRenderPassBeginInfo.framebuffer = imGuiBackEnd.frameBuffers[imageIndex];
 			imguiRenderPassBeginInfo.renderArea.extent.width = swapChainExtent.width;
 			imguiRenderPassBeginInfo.renderArea.extent.height = swapChainExtent.height;
 			imguiRenderPassBeginInfo.clearValueCount = 1;
 			imguiRenderPassBeginInfo.pClearValues = &clearValue;
-			vkCmdBeginRenderPass(imguiObjects.commandBuffers[imageIndex], &imguiRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdBeginRenderPass(imGuiBackEnd.commandBuffers[imageIndex], &imguiRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 			// Record Imgui Draw Data and draw funcs into command buffer
-			VKEngine_Imgui_RenderDrawData(ImGui::GetDrawData(), imguiObjects.commandBuffers[imageIndex]);
+			VKEngine_Imgui_RenderDrawData(ImGui::GetDrawData(), imGuiBackEnd.commandBuffers[imageIndex]);
 			// Submit command buffer
-			vkCmdEndRenderPass(imguiObjects.commandBuffers[imageIndex]);
-			err = vkEndCommandBuffer(imguiObjects.commandBuffers[imageIndex]);
+			vkCmdEndRenderPass(imGuiBackEnd.commandBuffers[imageIndex]);
+			err = vkEndCommandBuffer(imGuiBackEnd.commandBuffers[imageIndex]);
 			check_vk_result(err);
 
-			submitCommmandBuffers.push_back(imguiObjects.commandBuffers[imageIndex]);
+			submitCommmandBuffers.push_back(imGuiBackEnd.commandBuffers[imageIndex]);
 		}
 
 		VkSubmitInfo submitInfo = {};
