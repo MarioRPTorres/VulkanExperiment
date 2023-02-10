@@ -167,24 +167,7 @@ struct ImGui_ImplVulkanH_Window
 		ClearEnable = true;
 	}
 };
-// Initialization data, for ImGui_ImplVulkan_Init()
-// [Please zero-clear before use!]
-struct ImGui_ImplVulkan_InitInfo
-{
-	VkInstance                      Instance;
-	VkPhysicalDevice                PhysicalDevice;
-	VkDevice                        Device;
-	uint32_t                        QueueFamily;
-	VkQueue                         Queue;
-	VkPipelineCache                 PipelineCache;
-	VkDescriptorPool                DescriptorPool;
-	uint32_t                        Subpass;
-	uint32_t                        MinImageCount;          // >= 2
-	uint32_t                        ImageCount;             // >= MinImageCount
-	VkSampleCountFlagBits           MSAASamples;            // >= VK_SAMPLE_COUNT_1_BIT (0 -> default to VK_SAMPLE_COUNT_1_BIT)
-	const VkAllocationCallbacks* Allocator;
-	void                            (*CheckVkResultFn)(VkResult err);
-};
+
 // Each viewport will hold 1 ImGui_ImplVulkanH_WindowRenderBuffers
 // [Please zero-clear before use!]
 struct ImGui_ImplVulkanH_WindowRenderBuffers
@@ -204,6 +187,24 @@ struct ImGui_ImplVulkan_ViewportData
 	~ImGui_ImplVulkan_ViewportData() { }
 };
 
+// Initialization data, for ImGui_ImplVulkan_Init()
+// [Please zero-clear before use!]
+struct ImGui_ImplVulkan_InitInfo
+{
+	VkInstance                      Instance;
+	VkPhysicalDevice                PhysicalDevice;
+	VkDevice                        Device;
+	uint32_t                        QueueFamily;
+	VkQueue                         Queue;
+	VkPipelineCache                 PipelineCache;
+	VkDescriptorPool                DescriptorPool;
+	uint32_t                        Subpass;
+	uint32_t                        MinImageCount;          // >= 2
+	uint32_t                        ImageCount;             // >= MinImageCount
+	VkSampleCountFlagBits           MSAASamples;            // >= VK_SAMPLE_COUNT_1_BIT (0 -> default to VK_SAMPLE_COUNT_1_BIT)
+	const VkAllocationCallbacks* Allocator;
+	void                            (*CheckVkResultFn)(VkResult err);
+};
 // Vulkan data
 struct ImGui_ImplVulkan_Data
 {
@@ -231,13 +232,7 @@ struct ImGui_ImplVulkan_Data
 };
 
 ///***************************************************************************************************//
-
-static VkEImgui_Backend* VkEImgui_GetBackendData()
-{
-	return ImGui::GetCurrentContext() ? (VkEImgui_Backend*)ImGui::GetIO().BackendRendererUserData : NULL;
-}
-
-
+static VkEImgui_Backend* VkEImgui_GetBackendData();
 
 static ImGui_ImplVulkan_Data* ImGui_ImplVulkan_GetBackendData()
 {
@@ -298,161 +293,6 @@ static void CreateOrResizeBuffer(VkBuffer& buffer, VkDeviceMemory& buffer_memory
 	p_buffer_size = req.size;
 }
 
-static void VkEImgui_CreateDescriptorSetLayout(VkEImgui_Backend* bd)
-{
-	if (bd->descriptorSetLayout != VK_NULL_HANDLE)
-		return;
-
-	VkDevice device = bd->engine->getBackEndData().device;
-
-	IM_ASSERT(bd->fontSImage.sampler != VK_NULL_HANDLE && "Need to create a vulkan image sampler. FontImage Sampler is not set!");
-
-	VkSampler sampler[1] = { bd->fontSImage.sampler };
-	VkDescriptorSetLayoutBinding binding[1] = {};
-	binding[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	binding[0].descriptorCount = 1;
-	binding[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-	binding[0].pImmutableSamplers = sampler;
-	VkDescriptorSetLayoutCreateInfo info = {};
-	info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	info.bindingCount = 1;
-	info.pBindings = binding;
-	VkResult err = vkCreateDescriptorSetLayout(device, &info, nullptr, &bd->descriptorSetLayout);
-	check_vk_result(err);
-}
-
-static void VkEImgui_CreatePipelineLayout(VkEImgui_Backend* bd)
-{
-	if (bd->pipelineLayout != VK_NULL_HANDLE)
-		return;
-
-	VkDevice device = bd->engine->getBackEndData().device;
-
-	// Constants: we are using 'vec2 offset' and 'vec2 scale' instead of a full 3d projection matrix
-	VkEImgui_CreateDescriptorSetLayout(bd);
-	VkPushConstantRange push_constants[1] = {};
-	push_constants[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-	push_constants[0].offset = sizeof(float) * 0;
-	push_constants[0].size = sizeof(float) * 4;
-	VkDescriptorSetLayout set_layout[1] = { bd->descriptorSetLayout };
-	VkPipelineLayoutCreateInfo layout_info = {};
-	layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	layout_info.setLayoutCount = 1;
-	layout_info.pSetLayouts = set_layout;
-	layout_info.pushConstantRangeCount = 1;
-	layout_info.pPushConstantRanges = push_constants;
-	VkResult  err = vkCreatePipelineLayout(device, &layout_info, bd->allocator, &bd->pipelineLayout);
-	check_vk_result(err);
-}
-
-void VkEImgui_CreatePipeline(VkEImgui_Backend* bd)
-{
-	if (bd->secondaryPipeline != VK_NULL_HANDLE)
-		return;
-
-	VulkanBackEndData vk = bd->engine->getBackEndData();
-
-	VkPipelineShaderStageCreateInfo stage[2] = {};
-	stage[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	stage[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-	stage[0].module = bd->ShaderModuleVert;
-	stage[0].pName = "main";
-	stage[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	stage[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	stage[1].module = bd->ShaderModuleFrag;
-	stage[1].pName = "main";
-
-	VkVertexInputBindingDescription binding_desc[1] = {};
-	binding_desc[0].stride = sizeof(ImDrawVert);
-	binding_desc[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-	VkVertexInputAttributeDescription attribute_desc[3] = {};
-	attribute_desc[0].location = 0;
-	attribute_desc[0].binding = binding_desc[0].binding;
-	attribute_desc[0].format = VK_FORMAT_R32G32_SFLOAT;
-	attribute_desc[0].offset = IM_OFFSETOF(ImDrawVert, pos);
-	attribute_desc[1].location = 1;
-	attribute_desc[1].binding = binding_desc[0].binding;
-	attribute_desc[1].format = VK_FORMAT_R32G32_SFLOAT;
-	attribute_desc[1].offset = IM_OFFSETOF(ImDrawVert, uv);
-	attribute_desc[2].location = 2;
-	attribute_desc[2].binding = binding_desc[0].binding;
-	attribute_desc[2].format = VK_FORMAT_R8G8B8A8_UNORM;
-	attribute_desc[2].offset = IM_OFFSETOF(ImDrawVert, col);
-
-	VkPipelineVertexInputStateCreateInfo vertex_info = {};
-	vertex_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertex_info.vertexBindingDescriptionCount = 1;
-	vertex_info.pVertexBindingDescriptions = binding_desc;
-	vertex_info.vertexAttributeDescriptionCount = 3;
-	vertex_info.pVertexAttributeDescriptions = attribute_desc;
-
-	VkPipelineInputAssemblyStateCreateInfo ia_info = {};
-	ia_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	ia_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-	VkPipelineViewportStateCreateInfo viewport_info = {};
-	viewport_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-	viewport_info.viewportCount = 1;
-	viewport_info.scissorCount = 1;
-
-	VkPipelineRasterizationStateCreateInfo raster_info = {};
-	raster_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-	raster_info.polygonMode = VK_POLYGON_MODE_FILL;
-	raster_info.cullMode = VK_CULL_MODE_NONE;  //X
-	raster_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-	raster_info.lineWidth = 1.0f;
-
-	VkPipelineMultisampleStateCreateInfo ms_info = {};
-	ms_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	ms_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT; //X
-
-	VkPipelineColorBlendAttachmentState color_attachment[1] = {};//X
-	color_attachment[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	color_attachment[0].blendEnable = VK_TRUE;
-	color_attachment[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	color_attachment[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	color_attachment[0].colorBlendOp = VK_BLEND_OP_ADD;
-	color_attachment[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	color_attachment[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	color_attachment[0].alphaBlendOp = VK_BLEND_OP_ADD;
-
-	VkPipelineDepthStencilStateCreateInfo depth_info = {};//X
-	depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-
-	VkPipelineColorBlendStateCreateInfo blend_info = {};
-	blend_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	blend_info.attachmentCount = 1;
-	blend_info.pAttachments = color_attachment;
-
-	// Viewport and scissor are dynamic states which means they are specified at draw time
-	VkDynamicState dynamic_states[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-	VkPipelineDynamicStateCreateInfo dynamic_state = {};
-	dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	dynamic_state.dynamicStateCount = (uint32_t)IM_ARRAYSIZE(dynamic_states);
-	dynamic_state.pDynamicStates = dynamic_states;
-
-	VkEImgui_CreatePipelineLayout(bd);
-
-	VkGraphicsPipelineCreateInfo info = {};
-	info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	info.flags = bd->pipelineCreateFlags;
-	info.stageCount = 2;
-	info.pStages = stage;
-	info.pVertexInputState = &vertex_info;
-	info.pInputAssemblyState = &ia_info;
-	info.pViewportState = &viewport_info;
-	info.pRasterizationState = &raster_info;
-	info.pMultisampleState = &ms_info;
-	info.pDepthStencilState = &depth_info;
-	info.pColorBlendState = &blend_info;
-	info.pDynamicState = &dynamic_state;
-	info.layout = bd->pipelineLayout;
-	info.renderPass = bd->renderPass;
-	info.subpass = 0;
-	VkResult err = vkCreateGraphicsPipelines(vk.device, bd->pipelineCache, 1, &info, bd->allocator, &bd->secondaryPipeline);
-	check_vk_result(err);
-}
 
 VkSurfaceFormatKHR ImGui_ImplVulkanH_SelectSurfaceFormat(VkPhysicalDevice physical_device, VkSurfaceKHR surface, const VkFormat* request_formats, int request_formats_count, VkColorSpaceKHR request_color_space)
 {
@@ -720,7 +560,6 @@ void ImGui_ImplVulkanH_CreateWindowSwapChain(VkPhysicalDevice physical_device, V
 	}
 }
 
-
 void ImGui_ImplVulkanH_CreateWindowCommandBuffers(VkPhysicalDevice physical_device, VkDevice device, ImGui_ImplVulkanH_Window* wd, uint32_t queue_family, const VkAllocationCallbacks* allocator)
 {
 	IM_ASSERT(physical_device != VK_NULL_HANDLE && device != VK_NULL_HANDLE);
@@ -777,44 +616,8 @@ void ImGui_ImplVulkanH_CreateOrResizeWindow(VkInstance instance, VkPhysicalDevic
 	//ImGui_ImplVulkan_CreatePipeline(device, allocator, VK_NULL_HANDLE, wd->RenderPass, VK_SAMPLE_COUNT_1_BIT, &wd->Pipeline, g_VulkanInitInfo.Subpass);
 	ImGui_ImplVulkanH_CreateWindowCommandBuffers(physical_device, device, wd, queue_family, allocator);
 }
-static void ImGui_ImplVulkan_CreateWindow(ImGuiViewport* viewport)
-{
-	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-	ImGui_ImplVulkan_ViewportData* vd = IM_NEW(ImGui_ImplVulkan_ViewportData)();
-	viewport->RendererUserData = vd;
-	ImGui_ImplVulkanH_Window* wd = &vd->Window;
-	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
 
-	// Create surface
-	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
-	VkResult err = (VkResult)platform_io.Platform_CreateVkSurface(viewport, (ImU64)v->Instance, (const void*)v->Allocator, (ImU64*)&wd->Surface);
-	check_vk_result(err);
 
-	// Check for WSI support
-	VkBool32 res;
-	vkGetPhysicalDeviceSurfaceSupportKHR(v->PhysicalDevice, v->QueueFamily, wd->Surface, &res);
-	if (res != VK_TRUE)
-	{
-		IM_ASSERT(0); // Error: no WSI support on physical device
-		return;
-	}
-
-	// Select Surface Format
-	const VkFormat requestSurfaceImageFormat[] = { VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM };
-	const VkColorSpaceKHR requestSurfaceColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-	wd->SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(v->PhysicalDevice, wd->Surface, requestSurfaceImageFormat, (size_t)IM_ARRAYSIZE(requestSurfaceImageFormat), requestSurfaceColorSpace);
-
-	// Select Present Mode
-	// FIXME-VULKAN: Even thought mailbox seems to get us maximum framerate with a single window, it halves framerate with a second window etc. (w/ Nvidia and SDK 1.82.1)
-	VkPresentModeKHR present_modes[] = { VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_FIFO_KHR };
-	wd->PresentMode = ImGui_ImplVulkanH_SelectPresentMode(v->PhysicalDevice, wd->Surface, &present_modes[0], IM_ARRAYSIZE(present_modes));
-	//printf("[vulkan] Secondary window selected PresentMode = %d\n", wd->PresentMode);
-
-	// Create SwapChain, RenderPass, Framebuffer, etc.
-	wd->ClearEnable = (viewport->Flags & ImGuiViewportFlags_NoRendererClear) ? false : true;
-	ImGui_ImplVulkanH_CreateOrResizeWindow(v->Instance, v->PhysicalDevice, v->Device, wd, v->QueueFamily, v->Allocator, (int)viewport->Size.x, (int)viewport->Size.y, v->MinImageCount);
-	vd->WindowOwned = true;
-}
 void ImGui_ImplVulkanH_DestroyFrameRenderBuffers(VkDevice device, ImGui_ImplVulkanH_FrameRenderBuffers* buffers, const VkAllocationCallbacks* allocator)
 {
 	if (buffers->VertexBuffer) { vkDestroyBuffer(device, buffers->VertexBuffer, allocator); buffers->VertexBuffer = VK_NULL_HANDLE; }
@@ -855,31 +658,6 @@ void ImGui_ImplVulkanH_DestroyWindow(VkInstance instance, VkDevice device, ImGui
 	vkDestroySurfaceKHR(instance, wd->Surface, allocator);
 
 	*wd = ImGui_ImplVulkanH_Window();
-}
-
-static void ImGui_ImplVulkan_DestroyWindow(ImGuiViewport* viewport)
-{
-	// The main viewport (owned by the application) will always have RendererUserData == NULL since we didn't create the data for it.
-	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-	if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)viewport->RendererUserData)
-	{
-		ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
-		if (vd->WindowOwned)
-			ImGui_ImplVulkanH_DestroyWindow(v->Instance, v->Device, &vd->Window, v->Allocator);
-		ImGui_ImplVulkanH_DestroyWindowRenderBuffers(v->Device, &vd->RenderBuffers, v->Allocator);
-		IM_DELETE(vd);
-	}
-	viewport->RendererUserData = NULL;
-}
-static void ImGui_ImplVulkan_SetWindowSize(ImGuiViewport* viewport, ImVec2 size)
-{
-	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-	ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)viewport->RendererUserData;
-	if (vd == NULL) // This is NULL for the main viewport (which is left to the user/app to handle)
-		return;
-	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
-	vd->Window.ClearEnable = (viewport->Flags & ImGuiViewportFlags_NoRendererClear) ? false : true;
-	ImGui_ImplVulkanH_CreateOrResizeWindow(v->Instance, v->PhysicalDevice, v->Device, &vd->Window, v->QueueFamily, v->Allocator, (int)size.x, (int)size.y, v->MinImageCount);
 }
 
 static void ImGui_ImplVulkan_SetupRenderState(ImDrawData* draw_data, VkPipeline pipeline, VkCommandBuffer command_buffer, ImGui_ImplVulkanH_FrameRenderBuffers* rb, int fb_width, int fb_height)
@@ -927,7 +705,7 @@ static void ImGui_ImplVulkan_SetupRenderState(ImDrawData* draw_data, VkPipeline 
 }
 
 // Render function
-void VKEngine_Imgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline)
+void VkEImgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline)
 {
 	// Avoid rendering when minimized, scale coordinates for retina displays (screen coordinates != framebuffer coordinates)
 	int fb_width = (int)(draw_data->DisplaySize.x * draw_data->FramebufferScale.x);
@@ -1070,6 +848,73 @@ void VKEngine_Imgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer comman
 	vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 }
 
+
+
+static void ImGui_ImplVulkan_CreateWindow(ImGuiViewport* viewport)
+{
+	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
+	ImGui_ImplVulkan_ViewportData* vd = IM_NEW(ImGui_ImplVulkan_ViewportData)();
+	viewport->RendererUserData = vd;
+	ImGui_ImplVulkanH_Window* wd = &vd->Window;
+	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+
+	// Create surface
+	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+	VkResult err = (VkResult)platform_io.Platform_CreateVkSurface(viewport, (ImU64)v->Instance, (const void*)v->Allocator, (ImU64*)&wd->Surface);
+	check_vk_result(err);
+
+	// Check for WSI support
+	VkBool32 res;
+	vkGetPhysicalDeviceSurfaceSupportKHR(v->PhysicalDevice, v->QueueFamily, wd->Surface, &res);
+	if (res != VK_TRUE)
+	{
+		IM_ASSERT(0); // Error: no WSI support on physical device
+		return;
+	}
+
+	// Select Surface Format
+	const VkFormat requestSurfaceImageFormat[] = { VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM };
+	const VkColorSpaceKHR requestSurfaceColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+	wd->SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(v->PhysicalDevice, wd->Surface, requestSurfaceImageFormat, (size_t)IM_ARRAYSIZE(requestSurfaceImageFormat), requestSurfaceColorSpace);
+
+	// Select Present Mode
+	// FIXME-VULKAN: Even thought mailbox seems to get us maximum framerate with a single window, it halves framerate with a second window etc. (w/ Nvidia and SDK 1.82.1)
+	VkPresentModeKHR present_modes[] = { VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_FIFO_KHR };
+	wd->PresentMode = ImGui_ImplVulkanH_SelectPresentMode(v->PhysicalDevice, wd->Surface, &present_modes[0], IM_ARRAYSIZE(present_modes));
+	//printf("[vulkan] Secondary window selected PresentMode = %d\n", wd->PresentMode);
+
+	// Create SwapChain, RenderPass, Framebuffer, etc.
+	wd->ClearEnable = (viewport->Flags & ImGuiViewportFlags_NoRendererClear) ? false : true;
+	ImGui_ImplVulkanH_CreateOrResizeWindow(v->Instance, v->PhysicalDevice, v->Device, wd, v->QueueFamily, v->Allocator, (int)viewport->Size.x, (int)viewport->Size.y, v->MinImageCount);
+	vd->WindowOwned = true;
+}
+
+static void ImGui_ImplVulkan_DestroyWindow(ImGuiViewport* viewport)
+{
+	// The main viewport (owned by the application) will always have RendererUserData == NULL since we didn't create the data for it.
+	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
+	if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)viewport->RendererUserData)
+	{
+		ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+		if (vd->WindowOwned)
+			ImGui_ImplVulkanH_DestroyWindow(v->Instance, v->Device, &vd->Window, v->Allocator);
+		ImGui_ImplVulkanH_DestroyWindowRenderBuffers(v->Device, &vd->RenderBuffers, v->Allocator);
+		IM_DELETE(vd);
+	}
+	viewport->RendererUserData = NULL;
+}
+
+static void ImGui_ImplVulkan_SetWindowSize(ImGuiViewport* viewport, ImVec2 size)
+{
+	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
+	ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)viewport->RendererUserData;
+	if (vd == NULL) // This is NULL for the main viewport (which is left to the user/app to handle)
+		return;
+	ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+	vd->Window.ClearEnable = (viewport->Flags & ImGuiViewportFlags_NoRendererClear) ? false : true;
+	ImGui_ImplVulkanH_CreateOrResizeWindow(v->Instance, v->PhysicalDevice, v->Device, &vd->Window, v->QueueFamily, v->Allocator, (int)size.x, (int)size.y, v->MinImageCount);
+}
+
 static void ImGui_ImplVulkan_RenderWindow(ImGuiViewport* viewport, void*)
 {
 	ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
@@ -1118,7 +963,7 @@ static void ImGui_ImplVulkan_RenderWindow(ImGuiViewport* viewport, void*)
 		}
 	}
 
-	VKEngine_Imgui_RenderDrawData(viewport->DrawData, fd->CommandBuffer, wd->Pipeline);
+	VkEImgui_RenderDrawData(viewport->DrawData, fd->CommandBuffer, wd->Pipeline);
 
 	{
 		vkCmdEndRenderPass(fd->CommandBuffer);
@@ -1171,6 +1016,7 @@ static void ImGui_ImplVulkan_SwapBuffers(ImGuiViewport* viewport, void*)
 	wd->FrameIndex = (wd->FrameIndex + 1) % wd->ImageCount;         // This is for the next vkWaitForFences()
 	wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->ImageCount; // Now we can use the next set of semaphores
 }
+
 void ImGui_ImplVulkan_InitPlatformInterface()
 {
 	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
@@ -1193,6 +1039,168 @@ void check_vk_result(VkResult err)
 	fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
 	if (err < 0)
 		abort();
+}
+
+static VkEImgui_Backend* VkEImgui_GetBackendData()
+{
+	return ImGui::GetCurrentContext() ? (VkEImgui_Backend*)ImGui::GetIO().BackendRendererUserData : NULL;
+}
+
+
+static void VkEImgui_CreateDescriptorSetLayout(VkEImgui_Backend* bd)
+{
+	if (bd->descriptorSetLayout != VK_NULL_HANDLE)
+		return;
+
+	VkDevice device = bd->engine->getBackEndData().device;
+
+	IM_ASSERT(bd->fontSImage.sampler != VK_NULL_HANDLE && "Need to create a vulkan image sampler. FontImage Sampler is not set!");
+
+	VkSampler sampler[1] = { bd->fontSImage.sampler };
+	VkDescriptorSetLayoutBinding binding[1] = {};
+	binding[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	binding[0].descriptorCount = 1;
+	binding[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	binding[0].pImmutableSamplers = sampler;
+	VkDescriptorSetLayoutCreateInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	info.bindingCount = 1;
+	info.pBindings = binding;
+	VkResult err = vkCreateDescriptorSetLayout(device, &info, nullptr, &bd->descriptorSetLayout);
+	check_vk_result(err);
+}
+
+static void VkEImgui_CreatePipelineLayout(VkEImgui_Backend* bd)
+{
+	if (bd->pipelineLayout != VK_NULL_HANDLE)
+		return;
+
+	VkDevice device = bd->engine->getBackEndData().device;
+
+	// Constants: we are using 'vec2 offset' and 'vec2 scale' instead of a full 3d projection matrix
+	VkEImgui_CreateDescriptorSetLayout(bd);
+	VkPushConstantRange push_constants[1] = {};
+	push_constants[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	push_constants[0].offset = sizeof(float) * 0;
+	push_constants[0].size = sizeof(float) * 4;
+	VkDescriptorSetLayout set_layout[1] = { bd->descriptorSetLayout };
+	VkPipelineLayoutCreateInfo layout_info = {};
+	layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	layout_info.setLayoutCount = 1;
+	layout_info.pSetLayouts = set_layout;
+	layout_info.pushConstantRangeCount = 1;
+	layout_info.pPushConstantRanges = push_constants;
+	VkResult  err = vkCreatePipelineLayout(device, &layout_info, bd->allocator, &bd->pipelineLayout);
+	check_vk_result(err);
+}
+
+void VkEImgui_CreatePipeline(VkEImgui_Backend* bd)
+{
+	if (bd->secondaryPipeline != VK_NULL_HANDLE)
+		return;
+
+	VulkanBackEndData vk = bd->engine->getBackEndData();
+
+	VkPipelineShaderStageCreateInfo stage[2] = {};
+	stage[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	stage[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+	stage[0].module = bd->ShaderModuleVert;
+	stage[0].pName = "main";
+	stage[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	stage[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	stage[1].module = bd->ShaderModuleFrag;
+	stage[1].pName = "main";
+
+	VkVertexInputBindingDescription binding_desc[1] = {};
+	binding_desc[0].stride = sizeof(ImDrawVert);
+	binding_desc[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	VkVertexInputAttributeDescription attribute_desc[3] = {};
+	attribute_desc[0].location = 0;
+	attribute_desc[0].binding = binding_desc[0].binding;
+	attribute_desc[0].format = VK_FORMAT_R32G32_SFLOAT;
+	attribute_desc[0].offset = IM_OFFSETOF(ImDrawVert, pos);
+	attribute_desc[1].location = 1;
+	attribute_desc[1].binding = binding_desc[0].binding;
+	attribute_desc[1].format = VK_FORMAT_R32G32_SFLOAT;
+	attribute_desc[1].offset = IM_OFFSETOF(ImDrawVert, uv);
+	attribute_desc[2].location = 2;
+	attribute_desc[2].binding = binding_desc[0].binding;
+	attribute_desc[2].format = VK_FORMAT_R8G8B8A8_UNORM;
+	attribute_desc[2].offset = IM_OFFSETOF(ImDrawVert, col);
+
+	VkPipelineVertexInputStateCreateInfo vertex_info = {};
+	vertex_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertex_info.vertexBindingDescriptionCount = 1;
+	vertex_info.pVertexBindingDescriptions = binding_desc;
+	vertex_info.vertexAttributeDescriptionCount = 3;
+	vertex_info.pVertexAttributeDescriptions = attribute_desc;
+
+	VkPipelineInputAssemblyStateCreateInfo ia_info = {};
+	ia_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	ia_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+	VkPipelineViewportStateCreateInfo viewport_info = {};
+	viewport_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewport_info.viewportCount = 1;
+	viewport_info.scissorCount = 1;
+
+	VkPipelineRasterizationStateCreateInfo raster_info = {};
+	raster_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	raster_info.polygonMode = VK_POLYGON_MODE_FILL;
+	raster_info.cullMode = VK_CULL_MODE_NONE;  //X
+	raster_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	raster_info.lineWidth = 1.0f;
+
+	VkPipelineMultisampleStateCreateInfo ms_info = {};
+	ms_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	ms_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT; //X
+
+	VkPipelineColorBlendAttachmentState color_attachment[1] = {};//X
+	color_attachment[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	color_attachment[0].blendEnable = VK_TRUE;
+	color_attachment[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	color_attachment[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	color_attachment[0].colorBlendOp = VK_BLEND_OP_ADD;
+	color_attachment[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	color_attachment[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	color_attachment[0].alphaBlendOp = VK_BLEND_OP_ADD;
+
+	VkPipelineDepthStencilStateCreateInfo depth_info = {};//X
+	depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+
+	VkPipelineColorBlendStateCreateInfo blend_info = {};
+	blend_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	blend_info.attachmentCount = 1;
+	blend_info.pAttachments = color_attachment;
+
+	// Viewport and scissor are dynamic states which means they are specified at draw time
+	VkDynamicState dynamic_states[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+	VkPipelineDynamicStateCreateInfo dynamic_state = {};
+	dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamic_state.dynamicStateCount = (uint32_t)IM_ARRAYSIZE(dynamic_states);
+	dynamic_state.pDynamicStates = dynamic_states;
+
+	VkEImgui_CreatePipelineLayout(bd);
+
+	VkGraphicsPipelineCreateInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	info.flags = bd->pipelineCreateFlags;
+	info.stageCount = 2;
+	info.pStages = stage;
+	info.pVertexInputState = &vertex_info;
+	info.pInputAssemblyState = &ia_info;
+	info.pViewportState = &viewport_info;
+	info.pRasterizationState = &raster_info;
+	info.pMultisampleState = &ms_info;
+	info.pDepthStencilState = &depth_info;
+	info.pColorBlendState = &blend_info;
+	info.pDynamicState = &dynamic_state;
+	info.layout = bd->pipelineLayout;
+	info.renderPass = bd->renderPass;
+	info.subpass = 0;
+	VkResult err = vkCreateGraphicsPipelines(vk.device, bd->pipelineCache, 1, &info, bd->allocator, &bd->secondaryPipeline);
+	check_vk_result(err);
 }
 
 void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk, uint32_t minImageCount, uint32_t imageCount) 

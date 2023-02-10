@@ -552,7 +552,7 @@ private:
 			vkCmdBeginRenderPass(imGuiBackEnd.commandBuffers[imageIndex], &imguiRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 			// Record Imgui Draw Data and draw funcs into command buffer
-			VKEngine_Imgui_RenderDrawData(ImGui::GetDrawData(), imGuiBackEnd.commandBuffers[imageIndex]);
+			VkEImgui_RenderDrawData(ImGui::GetDrawData(), imGuiBackEnd.commandBuffers[imageIndex]);
 			// Submit command buffer
 			vkCmdEndRenderPass(imGuiBackEnd.commandBuffers[imageIndex]);
 			err = vkEndCommandBuffer(imGuiBackEnd.commandBuffers[imageIndex]);
