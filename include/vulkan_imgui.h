@@ -54,7 +54,7 @@ void VkEImgui_createBackendObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEI
 void createImguiDeviceObjects(VulkanEngine* vk, VkEImgui_Backend& imObj, VkEImgui_DeviceObjectsInfo info);
 void VkEImgui_addDefaultFont(VkEImgui_Backend& imBd);
 void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imObj);
-void cleanupImguiSwapChainObjects(VkEImgui_Backend& imObj);
+void VkEImgui_cleanupSwapChain(VkEImgui_Backend& imObj);
 void recreateImguiSwapChainObjects(VkEImgui_Backend& imObj, VkEImgui_DeviceObjectsInfo info);
 void VkEImgui_CreatePipeline(VkEImgui_Backend* bd);
 void VkEImgui_Shutdown();

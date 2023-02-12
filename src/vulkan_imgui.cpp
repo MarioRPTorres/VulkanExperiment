@@ -1367,30 +1367,6 @@ void VkEImgui_addDefaultFont(VkEImgui_Backend& imBd) {
 }
 
 
-
-void VkEImgui_Shutdown()
-{
-	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
-	IM_ASSERT(bd != NULL && "No renderer backend to shutdown, or already shutdown?");
-	ImGuiIO& io = ImGui::GetIO();
-
-	
-	// Manually delete main viewport render data in-case we haven't initialized for viewports
-	ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-	if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)main_viewport->RendererUserData)
-		IM_DELETE(vd);
-	main_viewport->RendererUserData = NULL;
-
-	// Clean up windows
-	ImGui::DestroyPlatformWindows();
-
-	io.BackendRendererName = NULL;
-	io.BackendRendererUserData = NULL;
-	//IM_DELETE(bd);
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
-}
-
 void ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count)
 {
 	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
@@ -1406,6 +1382,29 @@ void ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count)
 	//ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(v->Device, v->Allocator);
 
 	//bd->VulkanInitInfo.MinImageCount = min_image_count;
+}
+
+
+void VkEImgui_cleanupSwapChain(VkEImgui_Backend& imBd) {
+
+	VkDevice device = imBd.engine->getBackEndData().device;
+	for (size_t i = 0; i < imBd.frameBuffers.size(); i++) {
+		vkDestroyFramebuffer(device, imBd.frameBuffers[i], nullptr);
+	}
+	vkFreeCommandBuffers(device, imBd.commandPool, static_cast<uint32_t>(imBd.commandBuffers.size()), imBd.commandBuffers.data());
+	vkDestroyRenderPass(device, imBd.renderPass, nullptr);
+}
+
+void recreateImguiSwapChainObjects(VkEImgui_Backend& imBd, VkEImgui_DeviceObjectsInfo info) {
+	VulkanEngine* vk = imBd.engine;
+	VulkanBackEndData bd = vk->getBackEndData();
+	VkE_SwapChain* sc = vk->getSwapChainDetails();
+
+	ImGui_ImplVulkan_SetMinImageCount(sc->minImageCount);
+	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount);
+	VkE_createRenderPassInfo renderPassInfo = { sc->format, VK_SAMPLE_COUNT_1_BIT , info.firstPass, true };
+	imBd.renderPass = vk->createRenderPass(renderPassInfo);
+	imBd.frameBuffers = vk->createFramebuffers(imBd.renderPass, *sc);
 }
 
 
@@ -1429,24 +1428,26 @@ void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imBd) {
 	imBd.engine->cleanupSampledImage(imBd.fontSImage);
 }
 
-void cleanupImguiSwapChainObjects(VkEImgui_Backend& imBd) {
-	
-	VkDevice device = imBd.engine->getBackEndData().device;
-	for (size_t i = 0; i < imBd.frameBuffers.size(); i++) {
-		vkDestroyFramebuffer(device, imBd.frameBuffers[i], nullptr);
-	}
-	vkFreeCommandBuffers(device, imBd.commandPool, static_cast<uint32_t>(imBd.commandBuffers.size()), imBd.commandBuffers.data());
-	vkDestroyRenderPass(device, imBd.renderPass, nullptr);
+void VkEImgui_Shutdown()
+{
+	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
+	IM_ASSERT(bd != NULL && "No renderer backend to shutdown, or already shutdown?");
+	ImGuiIO& io = ImGui::GetIO();
+
+
+	// Manually delete main viewport render data in-case we haven't initialized for viewports
+	ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+	if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)main_viewport->RendererUserData)
+		IM_DELETE(vd);
+	main_viewport->RendererUserData = NULL;
+
+	// Clean up windows
+	ImGui::DestroyPlatformWindows();
+
+	io.BackendRendererName = NULL;
+	io.BackendRendererUserData = NULL;
+	//IM_DELETE(bd);
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 }
 
-void recreateImguiSwapChainObjects(VkEImgui_Backend& imBd, VkEImgui_DeviceObjectsInfo info) {
-	VulkanEngine* vk = imBd.engine;
-	VulkanBackEndData bd = vk->getBackEndData();
-	VkE_SwapChain* sc = vk->getSwapChainDetails();
-	
-	ImGui_ImplVulkan_SetMinImageCount(sc->minImageCount);
-	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount);
-	VkE_createRenderPassInfo renderPassInfo = { sc->format, VK_SAMPLE_COUNT_1_BIT , info.firstPass, true };
-	imBd.renderPass = vk->createRenderPass(renderPassInfo);
-	imBd.frameBuffers = vk->createFramebuffers(imBd.renderPass,*sc);
-}

@@ -339,7 +339,7 @@ private:
 		vkDestroyRenderPass(device, renderPass, nullptr);
 
 		if (enableImgui) {
-			cleanupImguiSwapChainObjects(imGuiBackEnd);
+			VkEImgui_cleanupSwapChain(imGuiBackEnd);
 		}
 
 		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
