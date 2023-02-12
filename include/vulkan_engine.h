@@ -107,7 +107,7 @@ struct VkE_SwapChain {
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
 	uint32_t minImageCount;
 	uint32_t imageCount;
-	VkFormat format;
+	VkFormat format = VK_FORMAT_UNDEFINED;
 	VkExtent2D extent;
 	std::vector<VkImage> images;
 	std::vector<VkImageView> imageViews; // missing
@@ -271,6 +271,7 @@ public:
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
 	void createImageSampler(VkSampler& sampler, uint32_t mipLevels);
 	void createSampledImage(VkE_Image& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
+	void cleanupSyncObjects(VkE_FrameSyncObjects syncObjs);
 	void cleanupSampledImage(VkE_Image& image);
 	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
 	void destroyBufferBundle(BufferBundle buffer);

@@ -1200,6 +1200,17 @@ void VulkanEngine::createSyncObjects(VkE_FrameSyncObjects& syncObjs,uint32_t ima
 	}
 }
 
+void VulkanEngine::cleanupSyncObjects(VkE_FrameSyncObjects syncObjs) {
+	uint32_t imageCount = syncObjs.renderFinishedSemaphore.size();
+
+	for (size_t i = 0; i < imageCount; i++) {
+		// Here there is a choice for the Allocator function
+		vkDestroySemaphore(device, syncObjs.renderFinishedSemaphore[i], nullptr);
+		vkDestroySemaphore(device, syncObjs.imageAvailableSemaphore[i], nullptr);
+		vkDestroyFence(device, syncObjs.inFlightFences[i], nullptr);
+	}
+}
+
 uint32_t VulkanEngine::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
 	VkPhysicalDeviceMemoryProperties memProperties;
 	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);

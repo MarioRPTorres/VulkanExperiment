@@ -297,23 +297,19 @@ private:
 		// Here there is a choice for the Allocator function
 		destroyBufferBundle(vertexBuffer);
 
-		for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-			// Here there is a choice for the Allocator function
-			vkDestroySemaphore(device, renderFinishedSemaphore[i], nullptr);
-			vkDestroySemaphore(device, imageAvailableSemaphore[i], nullptr);
-			vkDestroyFence(device, inFlightFences[i], nullptr);
-		}
+		cleanupSyncObjects(syncObjects);
+
 		// Here there is a choice for the Allocator function
 		vkDestroyCommandPool(device, commandPool, nullptr);
 		if (transientcommandPool != commandPool) vkDestroyCommandPool(device, transientcommandPool, nullptr);
 		
 		if (enableImgui) {
 			// Resources to destroy when the program ends
-			cleanupImguiObjects(imGuiBackEnd);
+			VkEImgui_cleanupBackEndObjects(imGuiBackEnd);
+			VkEImgui_Shutdown();
 		}
 
 		vkDestroyDevice(device, nullptr);
-
 		if (enableValidationLayers) {
 			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 		}

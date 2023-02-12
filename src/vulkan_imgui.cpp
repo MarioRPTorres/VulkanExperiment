@@ -233,6 +233,9 @@ struct ImGui_ImplVulkan_Data
 
 ///***************************************************************************************************//
 static VkEImgui_Backend* VkEImgui_GetBackendData();
+static void VkEImgui_CreateDescriptorSetLayout(VkEImgui_Backend* bd);
+static void VkEImgui_CreatePipelineLayout(VkEImgui_Backend* bd);
+static void VkEImgui_CreatePipeline(VkEImgui_Backend* bd);
 
 static ImGui_ImplVulkan_Data* ImGui_ImplVulkan_GetBackendData()
 {
@@ -716,7 +719,7 @@ void VkEImgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buff
 	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
 	VulkanBackEndData vkBd = bd->engine->getBackEndData();
 	if (pipeline == VK_NULL_HANDLE)
-		pipeline = bd->secondaryPipeline;
+		pipeline = bd->pipeline;
 
 	// Allocate array to store enough vertex/index buffers. Each unique viewport gets its own storage.
 	ImGui_ImplVulkan_ViewportData* viewport_renderer_data = (ImGui_ImplVulkan_ViewportData*)draw_data->OwnerViewport->RendererUserData;
@@ -1046,9 +1049,7 @@ static VkEImgui_Backend* VkEImgui_GetBackendData()
 	return ImGui::GetCurrentContext() ? (VkEImgui_Backend*)ImGui::GetIO().BackendRendererUserData : NULL;
 }
 
-
-static void VkEImgui_CreateDescriptorSetLayout(VkEImgui_Backend* bd)
-{
+static void VkEImgui_CreateDescriptorSetLayout(VkEImgui_Backend* bd) {
 	if (bd->descriptorSetLayout != VK_NULL_HANDLE)
 		return;
 
@@ -1094,9 +1095,9 @@ static void VkEImgui_CreatePipelineLayout(VkEImgui_Backend* bd)
 	check_vk_result(err);
 }
 
-void VkEImgui_CreatePipeline(VkEImgui_Backend* bd)
+static void VkEImgui_CreatePipeline(VkEImgui_Backend* bd)
 {
-	if (bd->secondaryPipeline != VK_NULL_HANDLE)
+	if (bd->pipeline != VK_NULL_HANDLE)
 		return;
 
 	VulkanBackEndData vk = bd->engine->getBackEndData();
@@ -1199,7 +1200,7 @@ void VkEImgui_CreatePipeline(VkEImgui_Backend* bd)
 	info.layout = bd->pipelineLayout;
 	info.renderPass = bd->renderPass;
 	info.subpass = 0;
-	VkResult err = vkCreateGraphicsPipelines(vk.device, bd->pipelineCache, 1, &info, bd->allocator, &bd->secondaryPipeline);
+	VkResult err = vkCreateGraphicsPipelines(vk.device, bd->pipelineCache, 1, &info, bd->allocator, &bd->pipeline);
 	check_vk_result(err);
 }
 
@@ -1270,7 +1271,7 @@ void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imBd) {
 	//IM_ASSERT(imBd.descriptorPool != VK_NULL_HANDLE);
 	//IM_ASSERT(imBd.descriptorSetLayout != VK_NULL_HANDLE);
 	//IM_ASSERT(imBd.pipelineLayout != VK_NULL_HANDLE);
-	//IM_ASSERT(imBd.secondaryPipeline != VK_NULL_HANDLE);
+	//IM_ASSERT(imBd.pipeline != VK_NULL_HANDLE);
 	//IM_ASSERT(imBd.renderPass != VK_NULL_HANDLE);
 	VulkanBackEndData vkBackend = imBd.engine->getBackEndData();
 	VkE_SwapChain* sc = imBd.engine->getSwapChainDetails();
@@ -1366,40 +1367,14 @@ void VkEImgui_addDefaultFont(VkEImgui_Backend& imBd) {
 }
 
 
-void ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(VkDevice device, const VkAllocationCallbacks* allocator)
-{
-	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
-	for (int n = 0; n < platform_io.Viewports.Size; n++)
-		if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)platform_io.Viewports[n]->RendererUserData)
-			ImGui_ImplVulkanH_DestroyWindowRenderBuffers(device, &vd->RenderBuffers, allocator);
-}
 
-void ImGui_ImplVulkan_DestroyDeviceObjects()
-{
-	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
-	VulkanBackEndData vkBd = bd->engine->getBackEndData();
-	ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(vkBd.device, nullptr);
-
-	bd->engine->cleanupSampledImage(bd->fontSImage);
-	if (bd->descriptorSetLayout) { vkDestroyDescriptorSetLayout(vkBd.device, bd->descriptorSetLayout, nullptr); bd->descriptorSetLayout = VK_NULL_HANDLE; }
-	if (bd->pipelineLayout) { vkDestroyPipelineLayout(vkBd.device, bd->pipelineLayout, nullptr); bd->pipelineLayout = VK_NULL_HANDLE; }
-	if (bd->secondaryPipeline) { vkDestroyPipeline(vkBd.device, bd->secondaryPipeline, nullptr); bd->secondaryPipeline = VK_NULL_HANDLE; }
-}
-
-void ImGui_ImplVulkan_ShutdownPlatformInterface()
-{
-	ImGui::DestroyPlatformWindows();
-}
-
-void VKEngine_Imgui_Shutdown()
+void VkEImgui_Shutdown()
 {
 	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
 	IM_ASSERT(bd != NULL && "No renderer backend to shutdown, or already shutdown?");
 	ImGuiIO& io = ImGui::GetIO();
 
-	// First destroy objects in all viewports
-	ImGui_ImplVulkan_DestroyDeviceObjects();
-
+	
 	// Manually delete main viewport render data in-case we haven't initialized for viewports
 	ImGuiViewport* main_viewport = ImGui::GetMainViewport();
 	if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)main_viewport->RendererUserData)
@@ -1407,11 +1382,13 @@ void VKEngine_Imgui_Shutdown()
 	main_viewport->RendererUserData = NULL;
 
 	// Clean up windows
-	ImGui_ImplVulkan_ShutdownPlatformInterface();
+	ImGui::DestroyPlatformWindows();
 
 	io.BackendRendererName = NULL;
 	io.BackendRendererUserData = NULL;
 	//IM_DELETE(bd);
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 }
 
 void ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count)
@@ -1432,17 +1409,24 @@ void ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count)
 }
 
 
-void cleanupImguiObjects(VkEImgui_Backend& imBd) {
-
+void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imBd) {
 	VkDevice device = imBd.engine->getBackEndData().device;
+
+	// First destroy objects in all viewports
+	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+	for (int n = 0; n < platform_io.Viewports.Size; n++)
+		if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)platform_io.Viewports[n]->RendererUserData)
+			ImGui_ImplVulkanH_DestroyWindowRenderBuffers(device, &vd->RenderBuffers, nullptr);
+
 	// Resources to destroy when the program ends
 	if (imBd.ShaderModuleVert) { vkDestroyShaderModule(device, imBd.ShaderModuleVert, nullptr); imBd.ShaderModuleVert = VK_NULL_HANDLE; }
 	if (imBd.ShaderModuleFrag) { vkDestroyShaderModule(device, imBd.ShaderModuleFrag, nullptr); imBd.ShaderModuleFrag = VK_NULL_HANDLE; }
 	if (imBd.descriptorPool) { vkDestroyDescriptorPool(device, imBd.descriptorPool, nullptr); imBd.descriptorPool = VK_NULL_HANDLE; }
 	if (imBd.commandPool) { vkDestroyCommandPool(device, imBd.commandPool, nullptr); imBd.commandPool = VK_NULL_HANDLE; }
-	VKEngine_Imgui_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
+	if (imBd.descriptorSetLayout) { vkDestroyDescriptorSetLayout(device, imBd.descriptorSetLayout, nullptr); imBd.descriptorSetLayout = VK_NULL_HANDLE; }
+	if (imBd.pipelineLayout) { vkDestroyPipelineLayout(device, imBd.pipelineLayout, nullptr); imBd.pipelineLayout = VK_NULL_HANDLE; }
+	if (imBd.pipeline) { vkDestroyPipeline(device, imBd.pipeline, nullptr); imBd.pipeline = VK_NULL_HANDLE; }
+	imBd.engine->cleanupSampledImage(imBd.fontSImage);
 }
 
 void cleanupImguiSwapChainObjects(VkEImgui_Backend& imBd) {
