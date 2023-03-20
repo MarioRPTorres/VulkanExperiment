@@ -4,6 +4,34 @@
 #include "imgui.h"
 #include "vulkan_engine.h"
 
+struct VkEImgui_vertexBuffers {
+	BufferBundle vertex;
+	BufferBundle index;
+};
+
+struct VkEImgui_Viewport {
+	GLFWwindow* window = nullptr; // Not used in main window
+	VkSurfaceKHR surface = VK_NULL_HANDLE; // Not used in main window
+	VkE_SwapChain sc; // Not used in main window
+	std::vector<VkFramebuffer> frameBuffers;
+	std::vector<VkCommandBuffer> commandBuffers;
+	VkE_FrameSyncObjects syncObjects; // Not used in main window
+	VkQueue presentQueue; // Not used in main window
+	VkCommandPool commandPool; 
+	bool ClearEnable;
+	bool WindowOwned = false;
+	std::vector<VkEImgui_vertexBuffers> vertexBuffers;
+	
+	VkClearValue clearValue;
+	bool swapChainOutdated = false;
+	uint32_t imageIndex = 0;
+	uint32_t inFlightFrameIndex = 0; // Not used in main window
+
+	VkRenderPass renderPass;
+	VkPipeline pipeline;
+	float width;
+	float height;
+};
 
 struct VkEImgui_Backend {
 	VulkanEngine* engine = VK_NULL_HANDLE;
@@ -20,6 +48,7 @@ struct VkEImgui_Backend {
 	VkPipelineCreateFlags pipelineCreateFlags = 0;
 	uint32_t minImageCount;
 	uint32_t imageCount;
+	uint32_t maxFramesInFlight = 0;
 	VkDeviceSize BufferMemoryAlignment;
 
 	// Main Window renderer objects
@@ -30,10 +59,11 @@ struct VkEImgui_Backend {
 	std::vector<VkCommandBuffer> commandBuffers;
 
 	// Viewport Renderer common objects
-	BufferBundle vertexBuffer;
-	BufferBundle indexBuffer;
+	//VkRenderPass vpRenderPass = VK_NULL_HANDLE;
+	//VkPipeline vpPipeline = VK_NULL_HANDLE;
 	// Viewports
-//	std::vector<VKEngine_Imgui_Viewport> viewports = {};
+	VkEImgui_Viewport mainViewport;
+	std::vector<VkEImgui_Viewport*> viewports = {};
 
 	VkEImgui_Backend()
 	{

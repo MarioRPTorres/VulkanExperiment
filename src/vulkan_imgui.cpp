@@ -1034,6 +1034,267 @@ void ImGui_ImplVulkan_InitPlatformInterface()
 
 // ***VulkanImgui***
 
+void VkEImgui_CreateViewportSwapBufferObjects(VkEImgui_Viewport* vp) {
+
+	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
+	VulkanEngine* vk = bd->engine;
+	VulkanBackEndData vBd = bd->engine->getBackEndData();
+
+	vk->createSwapChain(vp->surface, vp->sc);
+	vk->createSwapChainImageViews(vp->sc.images, vp->sc.format, vp->sc.imageViews);
+	vp->renderPass = bd->engine->createRenderPass(vp->sc.format, VK_SAMPLE_COUNT_1_BIT, true, true, false, vp->ClearEnable);
+	VkEImgui_CreatePipeline(bd);
+
+	QueueFamilyIndices indices = findQueueFamilies(vBd.physicalDevice, vp->surface);
+	if (indices.presentFamily.has_value) {
+		vkGetDeviceQueue(vBd.device, indices.presentFamily.value, 0, &vp->presentQueue);
+	}
+	else {
+		vp->presentQueue = vBd.graphicsQueue;
+	}
+
+	// Create Frame Buffers
+	vp->frameBuffers = vk->createFramebuffers(vp->renderPass, vp->sc);
+	// Create Command Buffers x
+	vp->commandBuffers = vk->createCommandBuffers(vp->commandPool, vp->sc.imageCount);
+	// Create Sync Objects
+	vk->createSyncObjects(vp->syncObjects, vp->sc.imageCount);
+	vp->vertexBuffers.resize(vp->sc.imageCount);
+}
+
+static void VkEImgui_CreateWindow(ImGuiViewport* viewport)
+{
+	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
+	VulkanEngine* vk = bd->engine;
+	VulkanBackEndData vkBd = vk->getBackEndData();
+	bd->viewports.push_back(new VkEImgui_Viewport());
+	VkEImgui_Viewport* vp = bd->viewports.back();
+
+	viewport->RendererUserData = (void*)vp;
+	vp->ClearEnable = (viewport->Flags & ImGuiViewportFlags_NoRendererClear) ? false : true;
+	vp->WindowOwned = true;
+	// ImGui_ImplVulkanH_Window* wd = &vd->Window;
+	// ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+
+	// create the shader modules 
+	if (bd->ShaderModuleVert == VK_NULL_HANDLE) bd->ShaderModuleVert = vk->createShaderModule(__glsl_shader_vert_spv);
+	if (bd->ShaderModuleFrag == VK_NULL_HANDLE) bd->ShaderModuleFrag = vk->createShaderModule(__glsl_shader_frag_spv);
+	VkEImgui_CreateDescriptorSetLayout(bd);
+	VkEImgui_CreatePipelineLayout(bd);
+	// Create Command pool x
+	vk->createCommandPool(vp->commandPool, vkBd.graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+
+	// Create surface
+	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+	VkResult err = (VkResult)platform_io.Platform_CreateVkSurface(viewport, (ImU64)vkBd.instance, nullptr, (ImU64*)&vp->surface);
+	check_vk_result(err);
+
+	VkEImgui_CreateViewportSwapBufferObjects(vp);
+
+	// Create SwapChain, RenderPass, Framebuffer, etc.
+	//ImGui_ImplVulkanH_CreateOrResizeWindow(v->Instance, v->PhysicalDevice, v->Device, wd, v->QueueFamily, v->Allocator, (int)viewport->Size.x, (int)viewport->Size.y, v->MinImageCount);
+}
+
+static void VkEImgui_cleanupViewportSwapChain(VkEImgui_Viewport* vp) {
+	VkEImgui_Backend *bd = VkEImgui_GetBackendData();
+	VulkanEngine* vk = bd->engine;
+	VulkanBackEndData vkBd = vk->getBackEndData();
+
+	std::vector<VkFence>& inFlightFences = vp->syncObjects.inFlightFences;
+	vkWaitForFences(vkBd.device,  inFlightFences.size(), inFlightFences.data(), VK_TRUE, UINT64_MAX);
+
+	for (size_t i = 0; i < vp->frameBuffers.size(); i++) {
+		vkDestroyFramebuffer(vkBd.device, vp->frameBuffers[i], nullptr);
+		vkDestroyImageView(vkBd.device, vp->sc.imageViews[i], nullptr);
+	}
+
+	vkFreeCommandBuffers(vkBd.device, vp->commandPool, static_cast<uint32_t>(vp->commandBuffers.size()), vp->commandBuffers.data());
+	vkDestroyPipeline(vkBd.device, vp->pipeline, nullptr);
+	vkDestroyRenderPass(vkBd.device, vp->renderPass, nullptr);
+	vkDestroySwapchainKHR(vkBd.device, vp->sc.swapChain, nullptr);
+	vk->cleanupSyncObjects(vp->syncObjects);
+	for (size_t i = 0; i < vp->vertexBuffers.size(); i++) {
+		BufferBundle* vertex = &vp->vertexBuffers[i].vertex;
+		BufferBundle* index = &vp->vertexBuffers[i].index;
+		if (vertex->buffer) { vkDestroyBuffer(vkBd.device, vertex->buffer, nullptr); vertex->buffer = VK_NULL_HANDLE; }
+		if (vertex->memory) { vkFreeMemory(vkBd.device, vertex->memory, nullptr); vertex->memory = VK_NULL_HANDLE; }
+		if (index->buffer) { vkDestroyBuffer(vkBd.device, index->buffer, nullptr); index->buffer = VK_NULL_HANDLE; }
+		if (index->memory) { vkFreeMemory(vkBd.device, index->memory, nullptr); index->memory = VK_NULL_HANDLE; }
+		vertex->size = 0;
+		index->size = 0;
+	}
+}
+
+static void VkEImgui_DestroyWindow(ImGuiViewport* viewport) {
+	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
+	if (bd == NULL) return;
+	
+	VulkanBackEndData vkBd = bd->engine->getBackEndData();
+	std::vector<VkEImgui_Viewport*> vps = bd->viewports;
+	VkEImgui_Viewport* vp = (VkEImgui_Viewport*)viewport->RendererUserData;
+	
+	if (vp != NULL) {
+		VkEImgui_cleanupViewportSwapChain(vp);
+
+		vkDestroyCommandPool(vkBd.device, vp->commandPool, nullptr);
+		vkDestroySurfaceKHR(vkBd.instance, vp->surface, nullptr);
+
+		for (int i = 0; i < vps.size(); i++) {
+			if (vps[i] == vp) {
+				vps.erase(vps.begin() + i);
+				break;
+			}
+		}
+		delete vp;
+		//vps->erase(std::remove(vps->begin(), vps->end(), vp), vps->end());
+		viewport->RendererUserData = NULL;
+	}
+}
+
+static void VkEImgui_SetWindowSize(ImGuiViewport* viewport, ImVec2 size)
+{
+	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
+	VulkanBackEndData vkBd = bd->engine->getBackEndData();
+	VkEImgui_Viewport* vp = (VkEImgui_Viewport*)viewport->RendererUserData;
+
+	if (vp == NULL) // This is NULL for the main viewport (which is left to the user/app to handle)
+		return;
+
+	vp->swapChainOutdated = false;
+	vp->ClearEnable = (viewport->Flags & ImGuiViewportFlags_NoRendererClear) ? false : true;
+	vp->width = size.x;
+	vp->height = size.y;
+
+	VkEImgui_cleanupViewportSwapChain(vp);
+	VkEImgui_CreateViewportSwapBufferObjects(vp);
+}
+
+static void VkEImgui_RenderWindow(ImGuiViewport* viewport, void*)
+{
+	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
+	VulkanBackEndData vkBd = bd->engine->getBackEndData();
+	VkEImgui_Viewport* vp = (VkEImgui_Viewport*)viewport->RendererUserData;
+	VkE_FrameSyncObjects& so = vp->syncObjects;
+	VkResult err;
+
+	uint32_t inFlightFrameIndex = vp->inFlightFrameIndex;
+	vkWaitForFences(vkBd.device, 1, &so.inFlightFences[inFlightFrameIndex], VK_TRUE, UINT64_MAX);
+
+	err = vkAcquireNextImageKHR(vkBd.device, vp->sc.swapChain, UINT64_MAX, so.imageAvailableSemaphore[inFlightFrameIndex], VK_NULL_HANDLE, &vp->imageIndex);
+	
+	// Using the result we can check if the swapchain is out of data and if so we need to recreate it
+	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
+		vp->swapChainOutdated = true;
+		return;
+	}
+	check_vk_result(err);
+	
+	uint32_t& imageIndex = vp->imageIndex;
+	if (so.imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+		for (;;)
+		{
+			err = vkWaitForFences(vkBd.device, 1, &so.imagesInFlight[imageIndex], VK_TRUE, 100);
+			if (err == VK_SUCCESS) break;
+			if (err == VK_TIMEOUT) continue;
+			check_vk_result(err);
+		}
+	}
+	// Mark the image as now being in use by this frame
+	so.imagesInFlight[imageIndex] = so.inFlightFences[inFlightFrameIndex];
+	
+	VkCommandBuffer& cb = vp->commandBuffers[imageIndex];
+	err = vkResetCommandBuffer(cb, 0);
+	check_vk_result(err);
+	VkCommandBufferBeginInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	err = vkBeginCommandBuffer(cb, &info);
+	check_vk_result(err);
+
+
+	VkRenderPassBeginInfo rpBeginInfo = {};
+	rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	rpBeginInfo.renderPass = vp->renderPass;
+	rpBeginInfo.framebuffer = vp->frameBuffers[imageIndex];
+	rpBeginInfo.renderArea.extent.width = vp->sc.extent.width;
+	rpBeginInfo.renderArea.extent.height = vp->sc.extent.height;
+
+	if (viewport->Flags & ImGuiViewportFlags_NoRendererClear) {
+		rpBeginInfo.clearValueCount =  0;
+		rpBeginInfo.pClearValues =  NULL ;
+	}
+	else if(true) {
+		ImVec4 clear_color = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+		memcpy(&vp->clearValue.color.float32[0], &clear_color, 4 * sizeof(float));
+		rpBeginInfo.clearValueCount =  1;
+		rpBeginInfo.pClearValues = &vp->clearValue;
+	}
+
+	vkCmdBeginRenderPass(cb, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+	
+	VkEImgui_RenderDrawData(viewport->DrawData, cb, vp->pipeline);
+
+
+	vkCmdEndRenderPass(cb);
+	err = vkEndCommandBuffer(cb);
+	check_vk_result(err);
+		
+	VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.waitSemaphoreCount = 1;
+	submitInfo.pWaitSemaphores = &so.imageAvailableSemaphore[inFlightFrameIndex];
+	submitInfo.pWaitDstStageMask = &wait_stage;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &cb;
+	submitInfo.signalSemaphoreCount = 1;
+	submitInfo.pSignalSemaphores = &so.renderFinishedSemaphore[inFlightFrameIndex];
+
+			
+	err = vkResetFences(vkBd.device, 1, &so.inFlightFences[inFlightFrameIndex]);
+	check_vk_result(err);
+	err = vkQueueSubmit(vkBd.graphicsQueue, 1, &submitInfo, so.inFlightFences[inFlightFrameIndex]);
+	check_vk_result(err);
+}
+
+static void VkEImgui_SwapBuffers(ImGuiViewport* viewport,void*){
+	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
+	VkEImgui_Viewport* vp = (VkEImgui_Viewport*)viewport->RendererUserData;
+
+	if (vp->swapChainOutdated) {
+		VkEImgui_SetWindowSize(viewport, ImVec2((int)viewport->Size.x, (int)viewport->Size.y));
+		return;
+	}
+	VkResult err;
+	uint32_t present_index = vp->inFlightFrameIndex;
+
+	VkPresentInfoKHR info = {};
+	info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	info.waitSemaphoreCount = 1;
+	info.pWaitSemaphores = &vp->syncObjects.renderFinishedSemaphore[present_index];
+	info.swapchainCount = 1;
+	info.pSwapchains = &vp->sc.swapChain;
+	info.pImageIndices = &vp->imageIndex;
+	err = vkQueuePresentKHR(vp->presentQueue, &info);
+	if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
+		VkEImgui_SetWindowSize(viewport, ImVec2((int)viewport->Size.x, (int)viewport->Size.y));
+	else
+		check_vk_result(err);
+
+	vp->inFlightFrameIndex = (vp->inFlightFrameIndex + 1) % bd->maxFramesInFlight;         // This is for the next vkWaitForFences()
+}
+
+void VkEImgui_InitPlatformInterface()
+{
+	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+		IM_ASSERT(platform_io.Platform_CreateVkSurface != NULL && "Platform needs to setup the CreateVkSurface handler.");
+	platform_io.Renderer_CreateWindow = VkEImgui_CreateWindow;
+	platform_io.Renderer_DestroyWindow = VkEImgui_DestroyWindow;
+	platform_io.Renderer_SetWindowSize = VkEImgui_SetWindowSize;
+	platform_io.Renderer_RenderWindow = VkEImgui_RenderWindow;
+	platform_io.Renderer_SwapBuffers = VkEImgui_SwapBuffers;
+}
 
 void check_vk_result(VkResult err)
 {
