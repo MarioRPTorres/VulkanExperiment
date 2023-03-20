@@ -401,7 +401,7 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
 
 		// Query for a queue with tranfer operation but not for graphics operations
 		VkQueueFlags transferBit = queueFamily.queueFlags & (VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT);
-		if (transferBit == VK_QUEUE_TRANSFER_BIT)
+		if (transferBit & (VK_QUEUE_TRANSFER_BIT | ~VK_QUEUE_GRAPHICS_BIT) )
 			indices.transferFamily.set_value(i);
 		else if (transferBit & VK_QUEUE_TRANSFER_BIT)
 			transferFamilyIndice.set_value(i);
