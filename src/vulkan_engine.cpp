@@ -1202,7 +1202,7 @@ void VulkanEngine::createSyncObjects(VkE_FrameSyncObjects& syncObjs,uint32_t ima
 	}
 }
 
-void VulkanEngine::cleanupSyncObjects(VkE_FrameSyncObjects syncObjs) {
+void VulkanEngine::cleanupSyncObjects(VkE_FrameSyncObjects& syncObjs) {
 	uint32_t imageCount = syncObjs.renderFinishedSemaphore.size();
 
 	for (size_t i = 0; i < imageCount; i++) {
@@ -1211,6 +1211,10 @@ void VulkanEngine::cleanupSyncObjects(VkE_FrameSyncObjects syncObjs) {
 		vkDestroySemaphore(device, syncObjs.imageAvailableSemaphore[i], nullptr);
 		vkDestroyFence(device, syncObjs.inFlightFences[i], nullptr);
 	}
+	syncObjs.renderFinishedSemaphore.clear();
+	syncObjs.imageAvailableSemaphore.clear();
+	syncObjs.inFlightFences.clear();
+	syncObjs.imagesInFlight.clear();
 }
 
 uint32_t VulkanEngine::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {

@@ -121,8 +121,9 @@ struct VkE_FrameSyncObjects {
 };
 
 struct BufferBundle {
-	VkBuffer buffer;
-	VkDeviceMemory memory;
+	VkBuffer buffer = VK_NULL_HANDLE;
+	VkDeviceMemory memory = VK_NULL_HANDLE;
+	VkDeviceSize size = 0;
 };
 
 struct vertexDescriptions {
@@ -263,7 +264,7 @@ public:
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
 	void createImageSampler(VkSampler& sampler, uint32_t mipLevels);
 	void createSampledImage(VkE_Image& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
-	void cleanupSyncObjects(VkE_FrameSyncObjects syncObjs);
+	void cleanupSyncObjects(VkE_FrameSyncObjects& syncObjs);
 	void cleanupSampledImage(VkE_Image& image);
 	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
 	void destroyBufferBundle(BufferBundle buffer);
