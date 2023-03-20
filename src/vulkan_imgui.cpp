@@ -1584,7 +1584,7 @@ void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imBd) {
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
 	// This feature causes imgui to create new graphic pipelines and render passes that are incompatible 
-	//io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
 	//io.ConfigViewportsNoAutoMerge = true;
 	//io.ConfigViewportsNoTaskBarIcon = true;
 
@@ -1628,12 +1628,14 @@ void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imBd) {
 	//IM_ASSERT(init_info.Device != VK_NULL_HANDLE);
 	//IM_ASSERT(init_info.Queue != VK_NULL_HANDLE);
 
+
+	imBd.mainViewport.sc = *sc;
 	// Our render function expect RendererUserData to be storing the window render buffer we need (for the main viewport we won't use ->Window)
 	ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-	main_viewport->RendererUserData = IM_NEW(ImGui_ImplVulkan_ViewportData)();
+	main_viewport->RendererUserData = &imBd.mainViewport;
 
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-		ImGui_ImplVulkan_InitPlatformInterface();
+		VkEImgui_InitPlatformInterface();//ImGui_ImplVulkan_InitPlatformInterface();
 
 	// Create Fonts Texture
 	unsigned char* pixels;
@@ -1711,10 +1713,6 @@ void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imBd) {
 	VkDevice device = imBd.engine->getBackEndData().device;
 
 	// First destroy objects in all viewports
-	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
-	for (int n = 0; n < platform_io.Viewports.Size; n++)
-		if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)platform_io.Viewports[n]->RendererUserData)
-			ImGui_ImplVulkanH_DestroyWindowRenderBuffers(device, &vd->RenderBuffers, nullptr);
 
 	// Resources to destroy when the program ends
 	if (imBd.ShaderModuleVert) { vkDestroyShaderModule(device, imBd.ShaderModuleVert, nullptr); imBd.ShaderModuleVert = VK_NULL_HANDLE; }
@@ -1736,8 +1734,6 @@ void VkEImgui_Shutdown()
 
 	// Manually delete main viewport render data in-case we haven't initialized for viewports
 	ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-	if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)main_viewport->RendererUserData)
-		IM_DELETE(vd);
 	main_viewport->RendererUserData = NULL;
 
 	// Clean up windows
