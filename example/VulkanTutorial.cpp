@@ -201,8 +201,8 @@ private:
 		createSwapChain(mainSurface,mainSwapChain);
 		createSwapChainImageViews(swapChainImages, swapChainImageFormat,swapChainImageViews);
 		if (enableImgui) {
-			VkEImgui_setupBackEnd(imGuiBackEnd, (VulkanEngine*)this, mainSwapChain.minImageCount, mainSwapChain.imageCount);
-			VkEImgui_createBackendObjects((VulkanEngine*) this, imGuiBackEnd,imguiInfo);
+			VkEImgui_setupBackEnd(imGuiBackEnd, (VulkanEngine*)this, mainSwapChain.minImageCount, mainSwapChain.imageCount,MAX_FRAME_IN_FLIGHT);
+			VkEImgui_createBackEndObjects((VulkanEngine*) this, imGuiBackEnd,imguiInfo);
 			//createImguiDeviceObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
 		} 
 		renderPass = createRenderPass(mainSwapChain.format, msaaSamples, true, !enableImgui, true,true);

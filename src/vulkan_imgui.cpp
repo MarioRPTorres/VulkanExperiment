@@ -696,6 +696,50 @@ static void ImGui_ImplVulkan_SetupRenderState(ImDrawData* draw_data, VkPipeline 
 	}
 }
 
+static void VkEImgui_SetupRenderState(ImDrawData* draw_data, VkPipeline pipeline, VkCommandBuffer command_buffer, VkEImgui_vertexBuffers* rb, int fb_width, int fb_height)
+{
+	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
+
+	// Bind pipeline:
+	{
+		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	}
+
+	// Bind Vertex And Index Buffer:
+	if (draw_data->TotalVtxCount > 0)
+	{
+		VkBuffer vertex_buffers[1] = { rb->vertex.buffer };
+		VkDeviceSize vertex_offset[1] = { 0 };
+		vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, vertex_offset);
+		vkCmdBindIndexBuffer(command_buffer, rb->index.buffer, 0, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+	}
+
+	// Setup viewport:
+	{
+		VkViewport viewport;
+		viewport.x = 0;
+		viewport.y = 0;
+		viewport.width = (float)fb_width;
+		viewport.height = (float)fb_height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+	}
+
+	// Setup scale and translation:
+	// Our visible imgui space lies from draw_data->DisplayPps (top left) to draw_data->DisplayPos+data_data->DisplaySize (bottom right). DisplayPos is (0,0) for single viewport apps.
+	{
+		float scale[2];
+		scale[0] = 2.0f / draw_data->DisplaySize.x;
+		scale[1] = 2.0f / draw_data->DisplaySize.y;
+		float translate[2];
+		translate[0] = -1.0f - draw_data->DisplayPos.x * scale[0];
+		translate[1] = -1.0f - draw_data->DisplayPos.y * scale[1];
+		vkCmdPushConstants(command_buffer, bd->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(float) * 0, sizeof(float) * 2, scale);
+		vkCmdPushConstants(command_buffer, bd->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(float) * 2, sizeof(float) * 2, translate);
+	}
+}
+
 // Render function
 void VkEImgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline)
 {
@@ -711,36 +755,31 @@ void VkEImgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buff
 		pipeline = bd->pipeline;
 
 	// Allocate array to store enough vertex/index buffers. Each unique viewport gets its own storage.
-	ImGui_ImplVulkan_ViewportData* viewport_renderer_data = (ImGui_ImplVulkan_ViewportData*)draw_data->OwnerViewport->RendererUserData;
-	IM_ASSERT(viewport_renderer_data != NULL);
-	ImGui_ImplVulkanH_WindowRenderBuffers* wrb = &viewport_renderer_data->RenderBuffers;
-	if (wrb->FrameRenderBuffers == NULL)
-	{
-		wrb->Index = 0;
-		wrb->Count = bd->imageCount;
-		wrb->FrameRenderBuffers = (ImGui_ImplVulkanH_FrameRenderBuffers*)IM_ALLOC(sizeof(ImGui_ImplVulkanH_FrameRenderBuffers) * wrb->Count);
-		memset(wrb->FrameRenderBuffers, 0, sizeof(ImGui_ImplVulkanH_FrameRenderBuffers) * wrb->Count);
+	VkEImgui_Viewport* wrb = (VkEImgui_Viewport*)draw_data->OwnerViewport->RendererUserData;
+	IM_ASSERT(wrb != NULL);
+	if (wrb->vertexBuffers.size() == 0) {
+		wrb->imageIndex = 0;
+		wrb->vertexBuffers.resize(wrb->sc.imageCount);
 	}
-	IM_ASSERT(wrb->Count == bd->imageCount);
-	wrb->Index = (wrb->Index + 1) % wrb->Count;
-	ImGui_ImplVulkanH_FrameRenderBuffers* rb = &wrb->FrameRenderBuffers[wrb->Index];
+	//IM_ASSERT(wrb->Count == bd->imageCount);
+	//wrb->imageIndex = (wrb->imageIndex + 1) % wrb->sc.imageCount;
+	VkEImgui_vertexBuffers* rb = &wrb->vertexBuffers[wrb->imageIndex];
 
-	if (draw_data->TotalVtxCount > 0)
-	{
+	if (draw_data->TotalVtxCount > 0) {
 		// Create or resize the vertex/index buffers
 		size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 		size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-		if (rb->VertexBuffer == VK_NULL_HANDLE || rb->VertexBufferSize < vertex_size)
-			CreateOrResizeBuffer(rb->VertexBuffer, rb->VertexBufferMemory, rb->VertexBufferSize, vertex_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-		if (rb->IndexBuffer == VK_NULL_HANDLE || rb->IndexBufferSize < index_size)
-			CreateOrResizeBuffer(rb->IndexBuffer, rb->IndexBufferMemory, rb->IndexBufferSize, index_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+		if (rb->vertex.buffer == VK_NULL_HANDLE || rb->vertex.size < vertex_size)
+			CreateOrResizeBuffer(rb->vertex.buffer, rb->vertex.memory, rb->vertex.size, vertex_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+		if (rb->index.buffer == VK_NULL_HANDLE || rb->index.size < index_size)
+			CreateOrResizeBuffer(rb->index.buffer, rb->index.memory, rb->index.size, vertex_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
 		// Upload vertex/index data into a single contiguous GPU buffer
 		ImDrawVert* vtx_dst = NULL;
 		ImDrawIdx* idx_dst = NULL;
-		VkResult err = vkMapMemory(vkBd.device, rb->VertexBufferMemory, 0, rb->VertexBufferSize, 0, (void**)(&vtx_dst));
+		VkResult err = vkMapMemory(vkBd.device, rb->vertex.memory, 0, rb->vertex.size, 0, (void**)(&vtx_dst));
 		check_vk_result(err);
-		err = vkMapMemory(vkBd.device, rb->IndexBufferMemory, 0, rb->IndexBufferSize, 0, (void**)(&idx_dst));
+		err = vkMapMemory(vkBd.device, rb->index.memory, 0, rb->index.size, 0, (void**)(&idx_dst));
 		check_vk_result(err);
 		for (int n = 0; n < draw_data->CmdListsCount; n++)
 		{
@@ -752,19 +791,19 @@ void VkEImgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buff
 		}
 		VkMappedMemoryRange range[2] = {};
 		range[0].sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-		range[0].memory = rb->VertexBufferMemory;
+		range[0].memory = rb->vertex.memory;
 		range[0].size = VK_WHOLE_SIZE;
 		range[1].sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-		range[1].memory = rb->IndexBufferMemory;
+		range[1].memory = rb->index.memory;
 		range[1].size = VK_WHOLE_SIZE;
 		err = vkFlushMappedMemoryRanges(vkBd.device, 2, range);
 		check_vk_result(err);
-		vkUnmapMemory(vkBd.device, rb->VertexBufferMemory);
-		vkUnmapMemory(vkBd.device, rb->IndexBufferMemory);
+		vkUnmapMemory(vkBd.device, rb->vertex.memory);
+		vkUnmapMemory(vkBd.device, rb->index.memory);
 	}
 
 	// Setup desired Vulkan state
-	ImGui_ImplVulkan_SetupRenderState(draw_data, pipeline, command_buffer, rb, fb_width, fb_height);
+	VkEImgui_SetupRenderState(draw_data, pipeline, command_buffer, rb, fb_width, fb_height);
 
 	// Will project scissor/clipping rectangles into framebuffer space
 	ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
@@ -785,7 +824,7 @@ void VkEImgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buff
 				// User callback, registered via ImDrawList::AddCallback()
 				// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
 				if (pcmd->UserCallback == ImDrawCallback_ResetRenderState)
-					ImGui_ImplVulkan_SetupRenderState(draw_data, pipeline, command_buffer, rb, fb_width, fb_height);
+					VkEImgui_SetupRenderState(draw_data, pipeline, command_buffer, rb, fb_width, fb_height);
 				else
 					pcmd->UserCallback(cmd_list, pcmd);
 			}
@@ -1465,14 +1504,15 @@ static void VkEImgui_CreatePipeline(VkEImgui_Backend* bd)
 	check_vk_result(err);
 }
 
-void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk, uint32_t minImageCount, uint32_t imageCount) 
+void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk, uint32_t minImageCount, uint32_t imageCount, uint32_t maxFramesInFlight) 
 {
 	bd.engine = vk;
 	bd.minImageCount = minImageCount;
 	bd.imageCount = imageCount;
+	bd.maxFramesInFlight = maxFramesInFlight;
 }
 
-void VkEImgui_createBackendObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEImgui_DeviceObjectsInfo info) {
+void VkEImgui_createBackEndObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEImgui_DeviceObjectsInfo info) {
 	VulkanBackEndData vkBackend = imBd.engine->getBackEndData();
 	VkE_SwapChain* sc = imBd.engine->getSwapChainDetails();
 

@@ -78,9 +78,9 @@ struct VkEImgui_DeviceObjectsInfo {
 
 void check_vk_result(VkResult err); 
 
-void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk, uint32_t minImageCount, uint32_t imageCount);
+void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk, uint32_t minImageCount, uint32_t imageCount, uint32_t maxFramesInFlight);
 void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imguiBackEnd);
-void VkEImgui_createBackendObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEImgui_DeviceObjectsInfo info);
+void VkEImgui_createBackEndObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEImgui_DeviceObjectsInfo info);
 void createImguiDeviceObjects(VulkanEngine* vk, VkEImgui_Backend& imObj, VkEImgui_DeviceObjectsInfo info);
 void VkEImgui_addDefaultFont(VkEImgui_Backend& imBd);
 void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imObj);
