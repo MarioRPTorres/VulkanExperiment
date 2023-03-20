@@ -120,14 +120,6 @@ struct VkE_FrameSyncObjects {
 	std::vector<VkFence> imagesInFlight;
 };
 
-struct VkE_createRenderPassInfo {
-	VkFormat format;
-	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-	bool firstPass = true;
-	bool finalPass = true;
-	bool depthStencil = false;
-};
-
 struct BufferBundle {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
@@ -264,7 +256,7 @@ protected:
 public:
 	void createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails);
 	void createSwapChainImageViews(const std::vector<VkImage>& images, const VkFormat format, std::vector<VkImageView>& swapChainImageViews);
-	VkRenderPass createRenderPass(VkE_createRenderPassInfo info);
+	VkRenderPass createRenderPass(VkFormat format, VkSampleCountFlagBits msaaSamples, bool firstPass, bool finalPass, bool depthStencil ,bool clearEnable);
 	std::vector<VkFramebuffer> createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment = VK_NULL_HANDLE, VkImageView depthAttachment = VK_NULL_HANDLE);
 	VkShaderModule createShaderModule(const shaderCode& code);
 	std::vector<VkCommandBuffer> createCommandBuffers(const VkCommandPool commandPool, uint32_t buffersCount);

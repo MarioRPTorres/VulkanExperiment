@@ -205,8 +205,7 @@ private:
 			VkEImgui_createBackendObjects((VulkanEngine*) this, imGuiBackEnd,imguiInfo);
 			//createImguiDeviceObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
 		} 
-		VkE_createRenderPassInfo renderPassInfo = { mainSwapChain.format,msaaSamples,true,!enableImgui,true };
-		renderPass = createRenderPass(renderPassInfo);
+		renderPass = createRenderPass(mainSwapChain.format, msaaSamples, true, !enableImgui, true,true);
 		createDescriptorSetLayout();
 		char2shaderCode(readFile("./vert.spv"),vert);
 		char2shaderCode(readFile("./frag.spv"),frag);
@@ -376,8 +375,7 @@ private:
 		createSwapChain(mainSurface,mainSwapChain);
 		createSwapChainImageViews(swapChainImages, swapChainImageFormat, swapChainImageViews);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		VkE_createRenderPassInfo renderPassInfo = { mainSwapChain.format ,msaaSamples,true,!enableImgui,true};
-		renderPass = createRenderPass(renderPassInfo);
+		renderPass = createRenderPass(mainSwapChain.format, msaaSamples, true, !enableImgui, true, true);
 		createDescriptorPool();
 		createGraphicsPipeline(vert,frag, Vertex::getDescriptions());
 		createColorResources();

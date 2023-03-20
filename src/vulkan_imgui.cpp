@@ -1259,8 +1259,7 @@ void VkEImgui_createBackendObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEI
 	//VkEImgui_CreatePipeline(&imBd);
 
 	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount);
-	VkE_createRenderPassInfo renderPassInfo = { sc->format, VK_SAMPLE_COUNT_1_BIT , info.firstPass, true };
-	imBd.renderPass = vk->createRenderPass(renderPassInfo);
+	imBd.renderPass = vk->createRenderPass(sc->format, VK_SAMPLE_COUNT_1_BIT, info.firstPass, true,false,info.firstPass);
 	imBd.frameBuffers = vk->createFramebuffers(imBd.renderPass, *sc);
 }
 
@@ -1402,8 +1401,7 @@ void recreateImguiSwapChainObjects(VkEImgui_Backend& imBd, VkEImgui_DeviceObject
 
 	ImGui_ImplVulkan_SetMinImageCount(sc->minImageCount);
 	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount);
-	VkE_createRenderPassInfo renderPassInfo = { sc->format, VK_SAMPLE_COUNT_1_BIT , info.firstPass, true };
-	imBd.renderPass = vk->createRenderPass(renderPassInfo);
+	imBd.renderPass = vk->createRenderPass(sc->format, VK_SAMPLE_COUNT_1_BIT, info.firstPass, true,false, info.firstPass);
 	imBd.frameBuffers = vk->createFramebuffers(imBd.renderPass, *sc);
 }
 
