@@ -1134,6 +1134,7 @@ static void VkEImgui_CreateWindow(ImGuiViewport* viewport)
 	//ImGui_ImplVulkanH_CreateOrResizeWindow(v->Instance, v->PhysicalDevice, v->Device, wd, v->QueueFamily, v->Allocator, (int)viewport->Size.x, (int)viewport->Size.y, v->MinImageCount);
 }
 
+
 static void VkEImgui_cleanupViewportSwapChain(VkEImgui_Viewport* vp) {
 	VkEImgui_Backend *bd = VkEImgui_GetBackendData();
 	VulkanEngine* vk = bd->engine;
@@ -1152,16 +1153,6 @@ static void VkEImgui_cleanupViewportSwapChain(VkEImgui_Viewport* vp) {
 	vkDestroyRenderPass(vkBd.device, vp->renderPass, nullptr);
 	vkDestroySwapchainKHR(vkBd.device, vp->sc.swapChain, nullptr);
 	vk->cleanupSyncObjects(vp->syncObjects);
-	for (size_t i = 0; i < vp->vertexBuffers.size(); i++) {
-		BufferBundle* vertex = &vp->vertexBuffers[i].vertex;
-		BufferBundle* index = &vp->vertexBuffers[i].index;
-		if (vertex->buffer) { vkDestroyBuffer(vkBd.device, vertex->buffer, nullptr); vertex->buffer = VK_NULL_HANDLE; }
-		if (vertex->memory) { vkFreeMemory(vkBd.device, vertex->memory, nullptr); vertex->memory = VK_NULL_HANDLE; }
-		if (index->buffer) { vkDestroyBuffer(vkBd.device, index->buffer, nullptr); index->buffer = VK_NULL_HANDLE; }
-		if (index->memory) { vkFreeMemory(vkBd.device, index->memory, nullptr); index->memory = VK_NULL_HANDLE; }
-		vertex->size = 0;
-		index->size = 0;
-	}
 }
 
 static void VkEImgui_DestroyWindow(ImGuiViewport* viewport) {
@@ -1176,6 +1167,16 @@ static void VkEImgui_DestroyWindow(ImGuiViewport* viewport) {
 		VkEImgui_cleanupViewportSwapChain(vp);
 
 		vkDestroyCommandPool(vkBd.device, vp->commandPool, nullptr);
+		for (size_t i = 0; i < vp->vertexBuffers.size(); i++) {
+			BufferBundle* vertex = &vp->vertexBuffers[i].vertex;
+			BufferBundle* index = &vp->vertexBuffers[i].index;
+			if (vertex->buffer) { vkDestroyBuffer(vkBd.device, vertex->buffer, nullptr); vertex->buffer = VK_NULL_HANDLE; }
+			if (vertex->memory) { vkFreeMemory(vkBd.device, vertex->memory, nullptr); vertex->memory = VK_NULL_HANDLE; }
+			if (index->buffer) { vkDestroyBuffer(vkBd.device, index->buffer, nullptr); index->buffer = VK_NULL_HANDLE; }
+			if (index->memory) { vkFreeMemory(vkBd.device, index->memory, nullptr); index->memory = VK_NULL_HANDLE; }
+			vertex->size = 0;
+			index->size = 0;
+		}
 		vkDestroySurfaceKHR(vkBd.instance, vp->surface, nullptr);
 
 		for (int i = 0; i < vps.size(); i++) {
@@ -1713,8 +1714,16 @@ void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imBd) {
 	VkDevice device = imBd.engine->getBackEndData().device;
 
 	// First destroy objects in all viewports
-
+	std::vector<VkEImgui_vertexBuffers>& vertexBuffers = imBd.mainViewport.vertexBuffers;
 	// Resources to destroy when the program ends
+	for (int i = 0; i < vertexBuffers.size(); i++) {
+		if (vertexBuffers[i].vertex.buffer) { vkDestroyBuffer(device, vertexBuffers[i].vertex.buffer, nullptr); vertexBuffers[i].vertex.buffer = VK_NULL_HANDLE; }
+		if (vertexBuffers[i].vertex.memory) { vkFreeMemory(device, vertexBuffers[i].vertex.memory, nullptr); vertexBuffers[i].vertex.memory = VK_NULL_HANDLE; }
+		if (vertexBuffers[i].index.buffer)  { vkDestroyBuffer(device, vertexBuffers[i].index.buffer, nullptr); vertexBuffers[i].index.buffer = VK_NULL_HANDLE; }
+		if (vertexBuffers[i].index.memory)  { vkFreeMemory(device, vertexBuffers[i].index.memory, nullptr); vertexBuffers[i].index.memory = VK_NULL_HANDLE; }
+		vertexBuffers[i].vertex.size = 0;
+		vertexBuffers[i].index.size = 0;
+	}
 	if (imBd.ShaderModuleVert) { vkDestroyShaderModule(device, imBd.ShaderModuleVert, nullptr); imBd.ShaderModuleVert = VK_NULL_HANDLE; }
 	if (imBd.ShaderModuleFrag) { vkDestroyShaderModule(device, imBd.ShaderModuleFrag, nullptr); imBd.ShaderModuleFrag = VK_NULL_HANDLE; }
 	if (imBd.descriptorPool) { vkDestroyDescriptorPool(device, imBd.descriptorPool, nullptr); imBd.descriptorPool = VK_NULL_HANDLE; }
