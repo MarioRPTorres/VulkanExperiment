@@ -92,9 +92,9 @@ private:
 		createSurface();
 		pickPhysicalDevice();
 		createLogicalDevice();
-		createSwapChain();
-		createSwapChainImageViews();
-		createShaderToyRenderPass();
+		createSwapChain(mainSurface,mainSwapChain);
+		createSwapChainImageViews(swapChainImages,swapChainImageFormat,swapChainImageViews);
+		renderPass = createRenderPass(mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true,false,true);
 
 		std::string vs = "./";
 		vs.append(vertexShader);
@@ -102,12 +102,12 @@ private:
 		std::string fs = "./";
 		fs.append(fragShader);
 		fs.append(".spv");
-		vert = readFile(vs);
-		frag = readFile(fs);
+		char2shaderCode(readFile(vs), vert);
+		char2shaderCode(readFile(fs), frag);
 		createGraphicsPipeline(vert, frag);
 		createShaderToyCommandPool();
-		createFramebuffers();
-		createCommandBuffers();
+		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain);
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		// Write the command buffers after the descriptor sets are updated
 		//writeCommandBuffers();
 		createSyncObjects();
@@ -151,7 +151,7 @@ private:
 		if (enableValidationLayers) {
 			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 		}
-		vkDestroySurfaceKHR(instance, surface, nullptr);
+		vkDestroySurfaceKHR(instance, mainSurface, nullptr);
 		vkDestroyInstance(instance, nullptr);
 
 		glfwDestroyWindow(window);	// Cleanup Window Resources
@@ -195,40 +195,15 @@ private:
 		cleanupSwapChain();
 
 		// Recreate the swapchain
-		createSwapChain();
-		createSwapChainImageViews();
+		createSwapChain(mainSurface, mainSwapChain);
+		createSwapChainImageViews(swapChainImages, swapChainImageFormat, swapChainImageViews);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		createShaderToyRenderPass();
+		renderPass = createRenderPass(mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true, false, true);
 		createGraphicsPipeline(vert, frag);
-		createFramebuffers();
-		createCommandBuffers();
+		swapChainFramebuffers = createFramebuffers(renderPass, mainSwapChain);
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		//writeCommandBuffers();
 	}
-
-	void createFramebuffers() {
-		swapChainFramebuffers.resize(swapChainImageViews.size());
-
-		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-			std::array<VkImageView, 1> attachments = {
-				swapChainImageViews[i]
-			};
-
-			VkFramebufferCreateInfo framebufferInfo = {};
-			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferInfo.renderPass = renderPass;
-			framebufferInfo.attachmentCount = static_cast<uint32_t> (attachments.size());
-			framebufferInfo.pAttachments = attachments.data();
-			framebufferInfo.width = swapChainExtent.width;
-			framebufferInfo.height = swapChainExtent.height;
-			framebufferInfo.layers = 1;
-
-			// Here there is a choice for the Allocator function
-			if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create framebuffer!");
-			}
-		}
-	}
-
 
 	void drawFrame() {
 		// The vkWaitForFences function takes an array of fences and waits for either
@@ -364,85 +339,6 @@ private:
 		currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 	}
 
-	void createShaderToyRenderPass() {
-		// Only difference from the original function is in the final attachment finalLayout. 
-		// In order to have an extra render pass after this one for imgui, the final layout of this render pass needs 
-		// to be VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-		// 
-		// 
-		// Color Attachment creation
-		VkAttachmentDescription colorAttachment = {};
-		colorAttachment.format = swapChainImageFormat;
-		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-		//• VK_ATTACHMENT_LOAD_OP_DONT_CARE : Existing contents are undefined;
-		//• VK_ATTACHMENT_LOAD_OP_LOAD : Preserve the existing contents of the attachment
-		//• VK_ATTACHMENT_LOAD_OP_CLEAR : Clear the values to a constant at the	start
-		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		//• VK_ATTACHMENT_STORE_OP_DONT_CARE: Contents of the framebuffer will be undefined after the rendering operation
-		//• VK_ATTACHMENT_STORE_OP_STORE : Rendered contents will be stored in memory and can be read later
-		//We’re interested in seeing the rendered triangle on the screen, so we’re going with the store operation here.
-		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		//Textures and framebuffers in Vulkan are represented by VkImage objects with a certain pixel format,	
-		//however the layout of the pixels in memory can change based on what you’re trying to do with an image.
-		//• VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : Images used as color attachment
-		//• VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : Images to be presented in the swap chain
-		//• VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : Images to be used as destination for a memory copy operation
-		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR; // Without msaa would be VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-		// Reference to point to the attachment in the attachment array
-		VkAttachmentReference colorAttachmentRef = {};
-		colorAttachmentRef.attachment = 0;
-		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-
-		// Create first subpass with one attachment
-		VkSubpassDescription subpass = {};
-		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &colorAttachmentRef;
-		subpass.pDepthStencilAttachment = nullptr;
-		subpass.pResolveAttachments = nullptr;
-
-		//The following other types of attachments can be referenced by a subpass :
-		//• pInputAttachments : Attachments that are read from a shader
-		//• pResolveAttachments : Attachments used for multisampling color attachments
-		//• pDepthStencilAttachment : Attachment for depth and stencil data
-		//• pPreserveAttachments : Attachments that are not used by this subpass,	but for which the data must be preserved
-
-		std::array<VkAttachmentDescription, 1> attachments = { colorAttachment };
-		// Create the Render pass with arguments of the subpasses used and the attachments to refer to.
-		VkRenderPassCreateInfo renderPassInfo = {};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());;
-		renderPassInfo.pAttachments = attachments.data();
-		renderPassInfo.subpassCount = 1;
-		renderPassInfo.pSubpasses = &subpass;
-
-		// Subpass dependecies
-		VkSubpassDependency dependency = {};
-		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-		dependency.dstSubpass = 0;
-		//The first two fields specify the indices of the dependency and the dependent subpass.
-		//The special value VK_SUBPASS_EXTERNAL refers to the implicit subpass before or after the render 
-		//pass depending on whether it is specified in srcSubpass or dstSubpass.The index 0 refers to our
-		//subpass, which is the first and only one.The dstSubpass must always be higher than srcSubpass to 
-		//prevent cycles in the dependency graph
-		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependency.srcAccessMask = 0;
-		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-		renderPassInfo.dependencyCount = 1;
-		renderPassInfo.pDependencies = &dependency;
-
-		// Here there is a choice for the Allocator function
-		if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create render pass!");
-		}
-	}
 	void createGraphicsPipeline(shaderCode vert, shaderCode frag) {
 
 		// Shader modules are only a thin wrapper around the shader bytecode. 
@@ -693,11 +589,10 @@ private:
 	}
 
 	void createShaderToyCommandPool() {
-		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
 		VkCommandPoolCreateInfo poolInfo = {};
 		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value;
+		poolInfo.queueFamilyIndex = graphicsFamily;
 		// Command Pool Flags
 		//• VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new 
 		//	commands very often(may change memory allocation behavior)
@@ -710,14 +605,14 @@ private:
 			throw std::runtime_error("failed to create command pool!");
 		}
 
-		if (queueFamilyIndices.sharedTransfer())
+		if (graphicsFamily == transferFamily)
 			transientcommandPool = commandPool;
 		else {
 			// Transfer Challenge & Transient Command Pool Challenge:
 			// Create a transient pool for short lived command buffers for memory allocation optimizations.
 			VkCommandPoolCreateInfo transientpoolInfo = {};
 			transientpoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-			transientpoolInfo.queueFamilyIndex = queueFamilyIndices.transferFamily.value;
+			transientpoolInfo.queueFamilyIndex = transferFamily;
 			transientpoolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
 			// Here there is a choice for the Allocator function

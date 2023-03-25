@@ -21,7 +21,7 @@ set( CMAKE_MESSAGE_LOG_LEVEL "STATUS" )
 
 
 # Create a static library with the modules
-add_library(${PROJECT_TARGET} STATIC  "src/vulkan_engine.cpp" "src/glfwInteraction.cpp" "src/importResources.cpp" "src/vulkan_vertices.cpp")
+add_library(${PROJECT_TARGET} STATIC  "src/vulkan_engine.cpp" "src/glfwInteraction.cpp" "src/importResources.cpp" "src/vulkan_vertices.cpp" "src/vulkan_descriptors.cpp")
 add_library(${IMGUI_TARGET} STATIC  "src/vulkan_imgui.cpp")
 
 #Define the C++ Standard
@@ -85,7 +85,6 @@ target_sources( IMGUI
                     ${IMGUI_DIR}/imgui.cpp
 
                 PRIVATE
-                    ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
                     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
                 )
 

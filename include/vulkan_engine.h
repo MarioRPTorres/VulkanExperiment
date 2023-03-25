@@ -22,6 +22,8 @@
 #include <map>
 #endif
 
+#include "assert.h"
+#define VKE_ASSERT(_EXPR)            assert(_EXPR)
 
 // ****************** Constants ********************
 // Number of frames to be processed concurrently(simultaneously)
@@ -46,14 +48,14 @@ const std::vector<const char*> deviceExtensions = {
 };
 
 // ****************** Datatypes ********************
-typedef std::vector<char> shaderCode;
+typedef std::vector<uint32_t> shaderCode;
 
-typedef struct _SampledImage {
+typedef struct _VkE_Image {
 	VkImage image = VK_NULL_HANDLE;
 	VkDeviceMemory memory = VK_NULL_HANDLE;
 	VkImageView view = VK_NULL_HANDLE;
 	VkSampler sampler = VK_NULL_HANDLE;
-} SampledImage;
+} VkE_Image;
 
 
 struct optional {
@@ -98,19 +100,30 @@ struct VulkanBackEndData {
 	uint32_t graphicsQueueFamily;
 	VkQueue graphicsQueue;
 	VkQueue transientQueue;
+	VkCommandPool commandPool;
 };
 
-struct SwapChainDetails {
+struct VkE_SwapChain {
+	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
 	uint32_t minImageCount;
 	uint32_t imageCount;
-	VkFormat format;
+	VkFormat format = VK_FORMAT_UNDEFINED;
 	VkExtent2D extent;
-	std::vector<VkImageView> imageViews;
+	std::vector<VkImage> images;
+	std::vector<VkImageView> imageViews; // missing
+};
+
+struct VkE_FrameSyncObjects {
+	std::vector<VkSemaphore> imageAvailableSemaphore;
+	std::vector<VkSemaphore> renderFinishedSemaphore;
+	std::vector<VkFence> inFlightFences;
+	std::vector<VkFence> imagesInFlight;
 };
 
 struct BufferBundle {
-	VkBuffer buffer;
-	VkDeviceMemory memory;
+	VkBuffer buffer = VK_NULL_HANDLE;
+	VkDeviceMemory memory = VK_NULL_HANDLE;
+	VkDeviceSize size = 0;
 };
 
 struct vertexDescriptions {
@@ -119,7 +132,13 @@ struct vertexDescriptions {
 };
 
 // *************** Other Functions *************
+void char2shaderCode(std::vector<char> inCharVector, shaderCode& outShaderCode);
+
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
+
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);
+
+SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
 
 // ***************************** Vulkan Engine Class ****************************
 // ******************************************************************************
@@ -138,15 +157,21 @@ protected:
 	VkDebugUtilsMessengerEXT debugMessenger;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	VkDevice device;
+	uint32_t graphicsFamily; // Graphics queue family
+	uint32_t transferFamily; // Transfer queue family
+	uint32_t mainPresentFamily; // Main Window Present Family queue family
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
 	VkQueue transferQueue;
-	VkSurfaceKHR surface;
-	VkSwapchainKHR swapChain;
-	std::vector<VkImage> swapChainImages;
-	VkFormat swapChainImageFormat;
-	VkExtent2D swapChainExtent;
-	std::vector<VkImageView> swapChainImageViews;
+	VkSurfaceKHR mainSurface;
+
+	VkE_SwapChain mainSwapChain;
+	VkSwapchainKHR& swapChain = mainSwapChain.swapChain;
+	std::vector<VkImage>& swapChainImages = mainSwapChain.images;
+	std::vector<VkImageView>& swapChainImageViews = mainSwapChain.imageViews;
+	VkFormat& swapChainImageFormat = mainSwapChain.format;
+	VkExtent2D& swapChainExtent = mainSwapChain.extent;
+
 	VkRenderPass renderPass;
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
@@ -155,14 +180,16 @@ protected:
 	VkCommandPool commandPool;
 	VkCommandPool transientcommandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
-	std::vector<VkSemaphore> imageAvailableSemaphore;
-	std::vector<VkSemaphore> renderFinishedSemaphore;
-	std::vector<VkFence> inFlightFences;
-	std::vector<VkFence> imagesInFlight;
+
+	VkE_FrameSyncObjects syncObjects;
+	std::vector<VkSemaphore>& imageAvailableSemaphore = syncObjects.imageAvailableSemaphore;
+	std::vector<VkSemaphore>& renderFinishedSemaphore = syncObjects.renderFinishedSemaphore;
+	std::vector<VkFence>& inFlightFences = syncObjects.inFlightFences;
+	std::vector<VkFence>& imagesInFlight = syncObjects.imagesInFlight;
+
 	size_t currentFrame = 0;
 	VkDescriptorPool descriptorPool;
 	std::array<std::vector<VkDescriptorSet>, MIRROR_DESCRIPTOR_SET_COUNT> descriptorSets;
-	int descriptorGroup = 0;
 	VkImage depthImage;
 	VkDeviceMemory depthImageMemory;
 	VkImageView depthImageView;
@@ -186,9 +213,7 @@ protected:
 	void setupDebugMessenger();
 	void createSurface();
 	int rateDeviceSuitability(VkPhysicalDevice device);
-	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 	bool isDeviceSuitable(VkPhysicalDevice device);
-	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 	void pickPhysicalDevice();
 	void createLogicalDevice();
 
@@ -196,21 +221,13 @@ protected:
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-	void createSwapChain();
-	void createSwapChainImageViews();
-	void createRenderPass();
 	void createDescriptorSetLayout();
 	// For creating the graphics pipeline
-	VkShaderModule createShaderModule(const std::vector<char>& code);
 	void createGraphicsPipeline(shaderCode vert, shaderCode frag, vertexDescriptions vertex);
 
 	// Various Resources
-	void createCommandPool();
-	void createCommandBuffers();
 	void createColorResources();
 	void createDepthResources();
-	void createFramebuffers();
-	void createSyncObjects();
 
 	void createIndexBuffer(std::vector<uint32_t> indices);
 
@@ -229,7 +246,6 @@ protected:
 		VkMemoryPropertyFlags properties, VkImage& image,
 		VkDeviceMemory& imageMemory);
 	VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
-	void createImageSampler(VkSampler& sampler, uint32_t mipLevels);
 	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
 	void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
 	
@@ -239,9 +255,17 @@ protected:
 
 
 public:
+	void createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails);
+	void createSwapChainImageViews(const std::vector<VkImage>& images, const VkFormat format, std::vector<VkImageView>& swapChainImageViews);
+	VkRenderPass createRenderPass(VkFormat format, VkSampleCountFlagBits msaaSamples, bool firstPass, bool finalPass, bool depthStencil ,bool clearEnable);
+	std::vector<VkFramebuffer> createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment = VK_NULL_HANDLE, VkImageView depthAttachment = VK_NULL_HANDLE);
+	VkShaderModule createShaderModule(const shaderCode& code);
+	std::vector<VkCommandBuffer> createCommandBuffers(const VkCommandPool commandPool, uint32_t buffersCount);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
-	void createSampledImage(SampledImage& image, int cols, int rows, int elemSize, char* imageData);
-	void cleanupSampledImage(SampledImage& image);
+	void createImageSampler(VkSampler& sampler, uint32_t mipLevels);
+	void createSampledImage(VkE_Image& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
+	void cleanupSyncObjects(VkE_FrameSyncObjects& syncObjs);
+	void cleanupSampledImage(VkE_Image& image);
 	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
 	void destroyBufferBundle(BufferBundle buffer);
 	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
@@ -249,34 +273,26 @@ public:
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	VkCommandBuffer beginSingleTimeCommands();
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
-	
+	void createSyncObjects(VkE_FrameSyncObjects& syncObjs, uint32_t imagesCount);
+	BufferBundle VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage);
+	void createCommandPool(VkCommandPool& pool, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags);
+
 	VulkanBackEndData getBackEndData() {
-		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 		VulkanBackEndData bd = {
 			window,
 			instance,
 			physicalDevice,
 			device,
-			queueFamilyIndices.graphicsFamily.value,
+			graphicsFamily,
 			graphicsQueue,
-			transferQueue
+			transferQueue,
+			commandPool
 		};
 
 		return bd;
 	}
 
-	SwapChainDetails getSwapChainDetails() {
-		SwapChainSupportDetails sc = querySwapChainSupport(physicalDevice);
-		SwapChainDetails details = {
-			sc.capabilities.minImageCount,
-			static_cast<uint32_t> (swapChainImages.size()),
-			swapChainImageFormat,
-			sc.capabilities.currentExtent,
-			swapChainImageViews
-		};
-
-		return details;
-	}
+	inline VkE_SwapChain* getSwapChainDetails() { return &mainSwapChain; }
 
 };
 
