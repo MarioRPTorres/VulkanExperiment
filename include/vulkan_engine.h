@@ -199,10 +199,6 @@ protected:
 	VkDeviceMemory colorImageMemory;
 	VkImageView colorImageView;
 
-	VkBuffer indexBuffer;
-	VkDeviceMemory indexBufferMemory;
-	uint32_t indexCount = 0;
-
 	uint32_t mipLevels;
 	bool framebufferResized = false;
 
@@ -228,8 +224,6 @@ protected:
 	// Various Resources
 	void createColorResources();
 	void createDepthResources();
-
-	void createIndexBuffer(std::vector<uint32_t> indices);
 
 	// Descriptors
 	void createDescriptorPool();
@@ -277,7 +271,9 @@ public:
 	inline void createVertexBuffer(void* data, VkDeviceSize bufferSize, VkE_Buffer& vertexBuffer) {
 		createBufferWithData(data, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertexBuffer);
 	};
-
+	inline void createIndexBuffer(void* data, VkDeviceSize bufferSize, VkE_Buffer& indexBuffer) {
+		createBufferWithData(data, bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indexBuffer);
+	};
 	VkCommandBuffer beginSingleTimeCommands();
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 	void createSyncObjects(VkE_FrameSyncObjects& syncObjs, uint32_t imagesCount);

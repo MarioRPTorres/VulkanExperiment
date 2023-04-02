@@ -157,6 +157,8 @@ private:
 	shaderCode vert;
 	shaderCode frag;
 	VkE_Buffer vertexBuffer;
+	VkE_Buffer indexBuffer;
+	uint32_t indexCount = 0;
 	std::vector<VkE_Buffer> uniformBuffers;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
@@ -222,7 +224,8 @@ private:
 		createDepthResources();
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain,colorImageView, depthImageView);
 		createVertexBuffer(vertices.data(),vertices.size()*sizeof(vertices[0]), vertexBuffer);
-		createIndexBuffer(indices);
+		createIndexBuffer(indices.data(),indices.size()*sizeof(indices[0]),indexBuffer);
+		indexCount = static_cast<uint32_t>(indices.size());
 		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		createUniformBuffers();
 		createTexture(textureImages[0], textures[0]);
@@ -312,10 +315,9 @@ private:
 		cleanupSampledImage(updatedTextureImages[1]);
 		// Here there is a choice for the Allocator function
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-		vkDestroyBuffer(device, indexBuffer, nullptr);
-		vkFreeMemory(device, indexBufferMemory, nullptr);
 		// Here there is a choice for the Allocator function
 		destroyBufferBundle(vertexBuffer);
+		destroyBufferBundle(indexBuffer);
 
 		cleanupSyncObjects(syncObjects);
 
@@ -724,7 +726,7 @@ private:
 			VkDeviceSize offsets[] = { 0 };
 			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
 			// We can only have a single index buffer.
-			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
 			// Descriptor Set bindings.ffs
 			vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &(descriptorSets[descriptorGroup][i]), 0, nullptr);
