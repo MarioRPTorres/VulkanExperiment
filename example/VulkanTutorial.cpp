@@ -48,7 +48,7 @@ const std::array<std::string, MAX_SAMPLED_IMAGES> textures = { "textures/texture
 const std::array<std::string, MAX_SAMPLED_IMAGES> updatedTextures = { "textures/texture_1_1.png", "textures/texture_2_1.png" };
 
 std::vector<uint32_t> indices = {};
-std::vector<Vertex> vertices = {};
+std::vector<PCTVertex> vertices = {};
 
 
 void compileShaders() {
@@ -60,8 +60,8 @@ void compileShaders() {
 }
 
 namespace std {
-	template<> struct hash<Vertex> {
-		size_t operator()(Vertex const& vertex) const {
+	template<> struct hash<PCTVertex> {
+		size_t operator()(PCTVertex const& vertex) const {
 		return ((hash<glm::vec3>()(vertex.pos) ^
 				(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
 				(hash<glm::vec2>()(vertex.texCoord) << 1);
@@ -95,11 +95,11 @@ void loadModel() {
 		throw std::runtime_error(warn + err);
 	}
 	if (!warn.empty()) printf(warn.c_str());
-	std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
+	std::unordered_map<PCTVertex, uint32_t> uniqueVertices = {};
 
 	for (const auto& shape : shapes) {
 		for (const auto& index : shape.mesh.indices) {
-			Vertex vertex = {};
+			PCTVertex vertex = {};
 
 			vertex.pos = {
 				attrib.vertices[3 * index.vertex_index + 0],
@@ -156,8 +156,8 @@ public:
 private:
 	shaderCode vert;
 	shaderCode frag;
-	BufferBundle vertexBuffer;
-	std::vector<BufferBundle> uniformBuffers;
+	VkE_Buffer vertexBuffer;
+	std::vector<VkE_Buffer> uniformBuffers;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
@@ -208,7 +208,7 @@ private:
 		createDescriptorSetLayout();
 		char2shaderCode(readFile("./vert.spv"),vert);
 		char2shaderCode(readFile("./frag.spv"),frag);
-		createGraphicsPipeline(vert, frag, Vertex::getDescriptions());
+		createGraphicsPipeline(vert, frag, PCTVertex::getDescriptions());
 		createCommandPool(commandPool,graphicsFamily,0);
 		// If transfer family and graphics family are the same use the same command pool
 		if (graphicsFamily == transferFamily)
@@ -221,7 +221,7 @@ private:
 		createColorResources();
 		createDepthResources();
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain,colorImageView, depthImageView);
-		vertexBuffer = createVertexBuffer((VulkanEngine*)this, vertices);
+		createVertexBuffer(vertices.data(),vertices.size()*sizeof(vertices[0]), vertexBuffer);
 		createIndexBuffer(indices);
 		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		createUniformBuffers();
@@ -398,7 +398,7 @@ private:
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		renderPass = createRenderPass(mainSwapChain.format, msaaSamples, true, !enableImgui, true, true);
 		createDescriptorPool();
-		createGraphicsPipeline(vert,frag, Vertex::getDescriptions());
+		createGraphicsPipeline(vert,frag, PCTVertex::getDescriptions());
 		createColorResources();
 		createDepthResources();
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain, colorImageView, depthImageView);

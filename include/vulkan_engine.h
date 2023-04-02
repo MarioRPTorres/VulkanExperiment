@@ -120,7 +120,7 @@ struct VkE_FrameSyncObjects {
 	std::vector<VkFence> imagesInFlight;
 };
 
-struct BufferBundle {
+struct VkE_Buffer {
 	VkBuffer buffer = VK_NULL_HANDLE;
 	VkDeviceMemory memory = VK_NULL_HANDLE;
 	VkDeviceSize size = 0;
@@ -266,15 +266,21 @@ public:
 	void createSampledImage(VkE_Image& image, int cols, int rows, int elemSize, char* imageData, uint32_t mipLvls, VkSampleCountFlagBits numsamples);
 	void cleanupSyncObjects(VkE_FrameSyncObjects& syncObjs);
 	void cleanupSampledImage(VkE_Image& image);
-	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
-	void destroyBufferBundle(BufferBundle buffer);
+
+
 	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 		VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+	void destroyBufferBundle(VkE_Buffer buffer);
+	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+	void createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage, VkE_Buffer& buffer);
+	inline void createVertexBuffer(void* data, VkDeviceSize bufferSize, VkE_Buffer& vertexBuffer) {
+		createBufferWithData(data, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertexBuffer);
+	};
+
 	VkCommandBuffer beginSingleTimeCommands();
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 	void createSyncObjects(VkE_FrameSyncObjects& syncObjs, uint32_t imagesCount);
-	BufferBundle VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage);
 	void createCommandPool(VkCommandPool& pool, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags);
 
 	VulkanBackEndData getBackEndData() {

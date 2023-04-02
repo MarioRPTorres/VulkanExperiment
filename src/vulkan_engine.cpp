@@ -1369,6 +1369,27 @@ void VulkanEngine::createDepthResources() {
 		1);
 }
 
+void VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage, VkE_Buffer& buffer) {
+
+	// Create a host visible buffer
+	VkE_Buffer stagingBuffer;
+	createBuffer(bufferSize,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		stagingBuffer.buffer,
+		stagingBuffer.memory);
+
+	mapBufferMemory(stagingBuffer.memory, data, bufferSize);
+
+	createBuffer(bufferSize,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer.buffer,
+		buffer.memory);
+	copyBuffer(stagingBuffer.buffer, buffer.buffer, bufferSize);
+
+	destroyBufferBundle(stagingBuffer);
+}
+
 void VulkanEngine::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
 	// Create a buffer handle with the specified memory needed and usage
@@ -1433,9 +1454,9 @@ void VulkanEngine::mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDe
 	vkUnmapMemory(device, bufferMemory);
 }
 
-void VulkanEngine::destroyBufferBundle(BufferBundle buffer) {
-	vkDestroyBuffer(device, buffer.buffer, nullptr);
-	vkFreeMemory(device, buffer.memory, nullptr);
+void VulkanEngine::destroyBufferBundle(VkE_Buffer buffer) {
+	vkDestroyBuffer(device, buffer.buffer, nullptr); buffer.buffer = VK_NULL_HANDLE;
+	vkFreeMemory(device, buffer.memory, nullptr); buffer.memory = VK_NULL_HANDLE;
 };
 
 void VulkanEngine::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
@@ -1901,133 +1922,3 @@ void VulkanEngine::freeDescriptorSet(VkDescriptorPool pool,VkDescriptorSet& set)
 	vkFreeDescriptorSets(device, pool, 1, &set);
 	set = VK_NULL_HANDLE;
 };
-
-
-BufferBundle VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage) {
-	BufferBundle vertexBuffer;
-
-	// Create a host visible buffer
-	BufferBundle stagingBuffer;
-	createBuffer(bufferSize,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		stagingBuffer.buffer,
-		stagingBuffer.memory);
-
-	mapBufferMemory(stagingBuffer.memory, data, bufferSize);
-
-	createBuffer(bufferSize,
-	VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
-	VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer.buffer,
-	vertexBuffer.memory);
-	copyBuffer(stagingBuffer.buffer, vertexBuffer.buffer, bufferSize);
-
-	destroyBufferBundle(stagingBuffer);
-
-	return vertexBuffer;
-}
-
-//void VulkanEngine::createTextureImage() {
-//	int texWidth, texHeight, texChannels;
-//
-//	cv::Mat matImage = loadImage(TEXTURE_PATH);
-//	VkDeviceSize imageSize = matImage.total() * matImage.elemSize();
-//
-//	texWidth = matImage.cols;
-//	texHeight = matImage.rows;
-//	texChannels = 4;
-//
-//	mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-//	VkBuffer stagingBuffer;
-//	VkDeviceMemory stagingBufferMemory;
-//
-//	createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-//		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-//		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer,
-//		stagingBufferMemory);
-//
-//	void* data;
-//	vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-//	memcpy(data, matImage.data, static_cast<size_t>(imageSize));
-//	vkUnmapMemory(device, stagingBufferMemory);
-//
-//	matImage.release();
-//
-//	createImage(
-//		texWidth,
-//		texHeight,
-//		mipLevels,
-//		VK_SAMPLE_COUNT_1_BIT,
-//		VK_FORMAT_R8G8B8A8_SRGB,
-//		VK_IMAGE_TILING_OPTIMAL,
-//		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-//		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-//		textureImage,
-//		textureImageMemory);
-//
-//	transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
-//	copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-//	//transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
-//
-//	//transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB,
-//	//	VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-//	//	VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels);
-//	generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
-//
-//	vkDestroyBuffer(device, stagingBuffer, nullptr);
-//	vkFreeMemory(device, stagingBufferMemory, nullptr);
-//}
-//
-//
-//void VulkanEngine::createTextureImageView() {
-//	textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
-//}
-//
-//void VulkanEngine::createTextureSampler() {
-//	// Sampler is a separate object that can be used on any image and doesn't reference the image anywhere
-//	VkSamplerCreateInfo samplerInfo = {};
-//	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-//	/*
-//	* VK_FILTER_LINEAR
-//	* VK_FILTER_NEAREST
-//	*/
-//	// Filter for oversampling 
-//	samplerInfo.magFilter = VK_FILTER_LINEAR;
-//	// Filter for undersampling
-//	samplerInfo.minFilter = VK_FILTER_LINEAR;
-//	/*
-//	Address mode: What happens when reading texels outside the picture
-//	• VK_SAMPLER_ADDRESS_MODE_REPEAT: Repeat the texture when going beyond the image dimensions.
-//	• VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT: Like repeat, but inverts
-//		the coordinates to mirror the image when going beyond the dimensions.
-//	• VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE: Take the color of the edge
-//		closest to the coordinate beyond the image dimensions.
-//	• VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE: Like clamp to edge,
-//		but instead uses the edge opposite to the closest edge.
-//	• VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER: Return a solid color
-//		when sampling beyond the dimensions of the image.
-//	*/
-//	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-//	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-//	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-//	// Unless for performance reasons always enable anisotropic filter
-//	samplerInfo.anisotropyEnable = VK_TRUE;
-//	samplerInfo.maxAnisotropy = 16;
-//	// Color when address mode is clamp to border.
-//	// Can be Black, white or transparent
-//	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-//	// Whether to normalize the coordinates to [0,1]
-//	samplerInfo.unnormalizedCoordinates = VK_FALSE;
-//	// used for percentage-closer filtering on shadow maps
-//	samplerInfo.compareEnable = VK_FALSE;
-//	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-//	// Filtering for mipmapping
-//	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-//	samplerInfo.mipLodBias = 0;
-//	samplerInfo.minLod = 0; // minimum level of detail to choose mip levels
-//	samplerInfo.maxLod = static_cast<float>(mipLevels); // maximum level of detail to choose mip levels
-//
-//	if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
-//		throw std::runtime_error("failed to create texture sampler!");
-//	}
-//}

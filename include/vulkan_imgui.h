@@ -4,8 +4,8 @@
 #include "vulkan_engine.h"
 
 struct VkEImgui_vertexBuffers {
-	BufferBundle vertex;
-	BufferBundle index;
+	VkE_Buffer vertex;
+	VkE_Buffer index;
 };
 
 struct VkEImgui_Viewport {

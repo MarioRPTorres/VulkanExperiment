@@ -2,7 +2,7 @@
 
 const float pi = 3.14159265358979323846264338327950288;
 
-void arrangePyramidVertex(std::vector<Vertex>& vert, std::vector<uint32_t>& ind) {
+void arrangePyramidVertex(std::vector<PCTVertex>& vert, std::vector<uint32_t>& ind) {
 	const float preMat[16] = {
 			1.0f, cosf(pi / 3.0f),  0.5f,													-1.0f,
 			0.0f, sinf(pi / 3.0f),  tanf(pi / 6.0f) * 0.5f,									-0.577350269189626f,
@@ -96,7 +96,7 @@ botchedModel tutorial = {
 };
 
 
-void generateVertices(std::vector<Vertex>& vert, std::vector<uint32_t>& ind) {
+void generateVertices(std::vector<PCTVertex>& vert, std::vector<uint32_t>& ind) {
 	botchedModel& m = tutorial;
 
 	vert = m.v;

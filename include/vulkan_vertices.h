@@ -11,7 +11,14 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp> // For Vertex hashing
 
-struct Vertex {
+// Size of attributtes are specified via the format
+//• float: VK_FORMAT_R32_SFLOAT
+//• vec2 : VK_FORMAT_R32G32_SFLOAT
+//• vec3 : VK_FORMAT_R32G32B32_SFLOAT
+//• vec4 : VK_FORMAT_R32G32B32A32_SFLOAT
+
+
+struct PCTVertex {
 	alignas(16) glm::vec3 pos;
 	alignas(16) glm::vec3 color;
 	alignas(8) glm::vec2 texCoord;
@@ -22,9 +29,9 @@ struct Vertex {
 		// Binding Description tells the rate at which vertex data is coming in
 		VkVertexInputBindingDescription bindingDescription = {};
 		bindingDescription.binding = 0;								// Binding index of this binding in the binding array
-		bindingDescription.stride = sizeof(Vertex);					// Stride between each vertex data 
-		// • VK_VERTEX_INPUT_RATE_VERTEX : Move to the next data entry after each vertex
-		// • VK_VERTEX_INPUT_RATE_INSTANCE : Move to the next data entry after each instance
+		bindingDescription.stride = sizeof(PCTVertex);					// Stride between each vertex data 
+		// ï¿½ VK_VERTEX_INPUT_RATE_VERTEX : Move to the next data entry after each vertex
+		// ï¿½ VK_VERTEX_INPUT_RATE_INSTANCE : Move to the next data entry after each instance
 		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 		return bindingDescription;
 	}
@@ -33,32 +40,28 @@ struct Vertex {
 		std::array<VkVertexInputAttributeDescription, 4>attributeDescriptions = {};
 		attributeDescriptions[0].binding = 0;
 		attributeDescriptions[0].location = 0;
-		//• float: VK_FORMAT_R32_SFLOAT
-		//• vec2 : VK_FORMAT_R32G32_SFLOAT
-		//• vec3 : VK_FORMAT_R32G32B32_SFLOAT
-		//• vec4 : VK_FORMAT_R32G32B32A32_SFLOAT
 		attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-		attributeDescriptions[0].offset = offsetof(Vertex, pos);
+		attributeDescriptions[0].offset = offsetof(PCTVertex, pos);
 
 		attributeDescriptions[1].binding = 0;
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-		attributeDescriptions[1].offset = offsetof(Vertex, color);
+		attributeDescriptions[1].offset = offsetof(PCTVertex, color);
 
 		attributeDescriptions[2].binding = 0;
 		attributeDescriptions[2].location = 2;
 		attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-		attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+		attributeDescriptions[2].offset = offsetof(PCTVertex, texCoord);
 
 
 		attributeDescriptions[3].binding = 0;
 		attributeDescriptions[3].location = 3;
 		attributeDescriptions[3].format = VK_FORMAT_R32_SINT;
-		attributeDescriptions[3].offset = offsetof(Vertex, texId);
+		attributeDescriptions[3].offset = offsetof(PCTVertex, texId);
 		return attributeDescriptions;
 	}
 
-	bool operator==(const Vertex& other) const {
+	bool operator==(const PCTVertex& other) const {
 		return pos == other.pos && color == other.color && texCoord == other.texCoord;
 	}
 
@@ -67,8 +70,5 @@ struct Vertex {
 		return vertexDescriptions({ getBindingDescription(), std::vector<VkVertexInputAttributeDescription>(attributes.begin(), attributes.end()) });
 	}
 };
-
-BufferBundle createVertexBuffer(VulkanEngine* vk, std::vector<Vertex> vertices);
-
 
 #endif

@@ -450,8 +450,8 @@ static void VkEImgui_DestroyWindow(ImGuiViewport* viewport) {
 
 		vkDestroyCommandPool(vkBd.device, vp->commandPool, nullptr);
 		for (size_t i = 0; i < vp->vertexBuffers.size(); i++) {
-			BufferBundle* vertex = &vp->vertexBuffers[i].vertex;
-			BufferBundle* index = &vp->vertexBuffers[i].index;
+			VkE_Buffer* vertex = &vp->vertexBuffers[i].vertex;
+			VkE_Buffer* index = &vp->vertexBuffers[i].index;
 			if (vertex->buffer) { vkDestroyBuffer(vkBd.device, vertex->buffer, nullptr); vertex->buffer = VK_NULL_HANDLE; }
 			if (vertex->memory) { vkFreeMemory(vkBd.device, vertex->memory, nullptr); vertex->memory = VK_NULL_HANDLE; }
 			if (index->buffer) { vkDestroyBuffer(vkBd.device, index->buffer, nullptr); index->buffer = VK_NULL_HANDLE; }
@@ -923,7 +923,7 @@ void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imBd) {
 	// Create Fonts Texture
 	unsigned char* pixels;
 	int width, height;
-	io.Fonts->AddFontFromFileTTF("./textures/ostrich-regular.ttf", 18.0f);
+	//io.Fonts->AddFontFromFileTTF("./textures/ostrich-regular.ttf", 18.0f);
 	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 	imBd.engine->createSampledImage(imBd.fontSImage, width, height, 4, (char*)pixels, 1, VK_SAMPLE_COUNT_1_BIT);
