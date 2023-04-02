@@ -110,7 +110,7 @@ private:
 		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
 		// Write the command buffers after the descriptor sets are updated
 		//writeCommandBuffers();
-		createSyncObjects();
+		createSyncObjects(syncObjects, mainSwapChain.imageCount);
 	}
 
 

@@ -203,7 +203,6 @@ private:
 		if (enableImgui) {
 			VkEImgui_setupBackEnd(imGuiBackEnd, (VulkanEngine*)this, mainSwapChain.minImageCount, mainSwapChain.imageCount,MAX_FRAME_IN_FLIGHT);
 			VkEImgui_createBackEndObjects((VulkanEngine*) this, imGuiBackEnd,imguiInfo);
-			//createImguiDeviceObjects((VulkanEngine*)this, imguiObjects, imguiInfo);
 		} 
 		renderPass = createRenderPass(mainSwapChain.format, msaaSamples, true, !enableImgui, true,true);
 		createDescriptorSetLayout();
@@ -251,6 +250,28 @@ private:
 				ImGui_ImplGlfw_NewFrame();
 				ImGui::NewFrame();
 				ImGui::ShowDemoWindow();
+				ImGui::Begin("Bobby",NULL,0);
+				if (ImGui::BeginMenuBar())
+				{
+					if (ImGui::BeginMenu("File"))
+					{
+						if (ImGui::MenuItem("Import content")) {
+						}
+						ImGui::EndMenu();
+					}
+					if (ImGui::BeginMenu("Edit"))
+					{
+						if (ImGui::MenuItem("Undo", "CTRL+Z")) {}
+						if (ImGui::MenuItem("Redo", "CTRL+Y", false, false)) {}  // Disabled item
+						ImGui::Separator();
+						if (ImGui::MenuItem("Cut", "CTRL+X")) {}
+						if (ImGui::MenuItem("Copy", "CTRL+C")) {}
+						if (ImGui::MenuItem("Paste", "CTRL+V")) {}
+						ImGui::EndMenu();
+					}
+					ImGui::EndMenuBar();
+				}
+				ImGui::End();
 				ImGui::Render();
 			}
 			drawFrame();

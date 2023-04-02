@@ -214,8 +214,9 @@ static void VkEImgui_SetupRenderState(ImDrawData* draw_data, VkPipeline pipeline
 }
 
 // Render function
-void VkEImgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline)
+void VkEImgui_RenderDrawData(void* imgui_draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline)
 {
+	ImDrawData* draw_data = static_cast<ImDrawData*> (imgui_draw_data);
 	// Avoid rendering when minimized, scale coordinates for retina displays (screen coordinates != framebuffer coordinates)
 	int fb_width = (int)(draw_data->DisplaySize.x * draw_data->FramebufferScale.x);
 	int fb_height = (int)(draw_data->DisplaySize.y * draw_data->FramebufferScale.y);

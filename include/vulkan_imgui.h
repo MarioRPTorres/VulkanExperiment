@@ -1,7 +1,6 @@
 #ifndef IMGUI_VULKAN_H
 #define IMGUI_VULKAN_H
 
-#include "imgui.h"
 #include "vulkan_engine.h"
 
 struct VkEImgui_vertexBuffers {
@@ -81,7 +80,6 @@ void check_vk_result(VkResult err);
 void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk, uint32_t minImageCount, uint32_t imageCount, uint32_t maxFramesInFlight);
 void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imguiBackEnd);
 void VkEImgui_createBackEndObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEImgui_DeviceObjectsInfo info);
-void createImguiDeviceObjects(VulkanEngine* vk, VkEImgui_Backend& imObj, VkEImgui_DeviceObjectsInfo info);
 void VkEImgui_addDefaultFont(VkEImgui_Backend& imBd);
 void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imObj);
 void VkEImgui_cleanupSwapChain(VkEImgui_Backend& imObj);
@@ -90,5 +88,5 @@ void VkEImgui_CreatePipeline(VkEImgui_Backend* bd);
 void VkEImgui_Shutdown();
 
 void VkE_Imgui_NewFrame();
-void VkEImgui_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline = VK_NULL_HANDLE);
+void VkEImgui_RenderDrawData(void* imgui_draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline = VK_NULL_HANDLE);
 #endif
