@@ -128,7 +128,8 @@ struct VkE_Buffer {
 
 struct vertexDescriptions {
 	VkVertexInputBindingDescription binding;
-	std::vector<VkVertexInputAttributeDescription> attributes;
+	const VkVertexInputAttributeDescription* data;
+	uint32_t vertexDescriptionsCount;
 };
 
 // *************** Other Functions *************
