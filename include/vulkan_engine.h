@@ -28,8 +28,6 @@
 // ****************** Constants ********************
 // Number of frames to be processed concurrently(simultaneously)
 const int MAX_FRAME_IN_FLIGHT = 2;
-// Number of parallel descriptor sets to switch between
-const int MIRROR_DESCRIPTOR_SET_COUNT = 2;
 // How many textures we will have loaded at the same time
 const int MAX_SAMPLED_IMAGES = 2;
 #ifdef NDEBUG

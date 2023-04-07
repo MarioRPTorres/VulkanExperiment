@@ -41,6 +41,9 @@ const int HEIGHT = 480;
 
 extern float cameraEye[3];
 
+// Number of parallel descriptor sets to switch between
+const int MIRROR_DESCRIPTOR_SET_COUNT = 2;
+
 const std::string MODEL_PATH = "models/cottage_obj.obj";
 const std::string TEXTURE_PATH = "textures/texture_1.png";
 
