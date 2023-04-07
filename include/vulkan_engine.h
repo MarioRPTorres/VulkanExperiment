@@ -302,4 +302,44 @@ public:
 
 };
 
+// ***************************** Vulkan Window Class ****************************
+// ******************************************************************************
+class VulkanWindow {
+protected:
+	VulkanEngine* vk;
+	GLFWwindow* window = nullptr;
+	VkSurfaceKHR surface = VK_NULL_HANDLE;
+	VkE_SwapChain sc;
+	std::vector<VkFramebuffer> frameBuffers;
+	std::vector<VkCommandBuffer> commandBuffers;
+	VkE_FrameSyncObjects syncObjects;
+	VkQueue graphicsQueue = VK_NULL_HANDLE;
+	VkQueue presentQueue = VK_NULL_HANDLE;
+	VkCommandPool commandPool = VK_NULL_HANDLE;
+
+	bool ClearEnable = false;
+	VkClearValue clearValue;
+
+	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+	uint32_t mipLevels = 1;
+	bool framebufferResized = false;
+	bool swapChainOutdated = false;
+	uint32_t imageIndex = 0;
+	uint32_t inFlightFrameIndex = 0;
+	VkE_Image msaaColorImage;
+	VkE_Image depthImage;
+
+	VkRenderPass renderPass = VK_NULL_HANDLE;
+	VkPipeline pipeline = VK_NULL_HANDLE;
+	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+	float width = 0;
+	float height = 0;
+protected:
+	// Various Resources
+	void createColorResources();
+	void createDepthResources();
+
+public:
+	VulkanWindow(VulkanEngine* vk) : vk(vk){};
+};
 #endif

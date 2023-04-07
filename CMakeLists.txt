@@ -4,14 +4,15 @@ cmake_minimum_required(VERSION 3.22)
 set(BUILD_MAIN_EXAMPLE TRUE)
 set(BUILD_EXTRA_EXAMPLES FALSE)
 set(BUILD_SHADERTOY_EXAMPLE TRUE)
+set(BUILD_POINTSDRAWING_EXAMPLE TRUE)
  
 # Set Target Name
 set(PROJECT_TARGET VulkanEngine)
 set(IMGUI_TARGET VulkanEngine_Imgui)
 
 set(EXAMPLE_MAIN_TARGET VulkanTutorial)
-set(EXAMPLE_NO_IMGUI VulkanTutorial_NoImgui)
 set(EXAMPLE_NO_SCORE VulkanTutorial_noScoreSelection)
+set(EXAMPLE_NO_IMGUI VulkanTutorial_NoImgui)
 
 project(VulkanExperiment VERSION 1.0.0 LANGUAGES C CXX)
 
@@ -243,6 +244,14 @@ if (BUILD_SHADERTOY_EXAMPLE)
 	    example/ShaderToyLoad.cpp
     )
     CONFIGUREEXAMPLETARGET(ShaderToyLoad TRUE FALSE)
+endif()
+
+if (BUILD_POINTSDRAWING_EXAMPLE)
+    # Create the Vulkan Tutorial application target using the main.cpp example 
+    add_executable( PointsDrawing 
+	    example/PointsDrawing.cpp
+    )
+    CONFIGUREEXAMPLETARGET(PointsDrawing TRUE TRUE)
 endif()
 
 if (BUILD_EXTRA_EXAMPLES)

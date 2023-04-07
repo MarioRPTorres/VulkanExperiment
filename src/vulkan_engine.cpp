@@ -1876,3 +1876,38 @@ void VulkanEngine::shutdownVulkanEngine() {
 	}
 	vkDestroyInstance(instance, nullptr);
 };
+
+
+void VulkanWindow::createColorResources() {
+	VkFormat colorFormat = sc.format;
+
+	vk->createImage(sc.extent.width, sc.extent.height,
+		1, msaaSamples,
+		colorFormat,
+		VK_IMAGE_TILING_OPTIMAL,
+		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		msaaColorImage.image, msaaColorImage.memory);
+
+	msaaColorImage.view = vk->createImageView(msaaColorImage.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+}
+
+
+void VulkanWindow::createDepthResources() {
+
+
+	VkFormat depthFormat = vk->findDepthFormat();
+
+	vk->createImage(sc.extent.width, sc.extent.height,
+		1, msaaSamples,
+		depthFormat, VK_IMAGE_TILING_OPTIMAL,
+		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage.image,
+		depthImage.memory);
+	depthImage.view = vk->createImageView(depthImage.image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+
+	vk->transitionImageLayout(depthImage.image, depthFormat,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		1);
+}
