@@ -185,13 +185,11 @@ protected:
 	VkImage depthImage;
 	VkDeviceMemory depthImageMemory;
 	VkImageView depthImageView;
-	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 	// Multisampling needs an offscreen buffer that is then rendered to the scrren
 	VkImage colorImage;
 	VkDeviceMemory colorImageMemory;
 	VkImageView colorImageView;
 
-	uint32_t mipLevels;
 	
 	int rateDeviceSuitability(VkPhysicalDevice device);
 	bool isDeviceSuitable(VkPhysicalDevice device,VkSurfaceKHR surface);
@@ -222,6 +220,8 @@ public:
 	void setupDebugMessenger();
 	void pickPhysicalDevice(VkSurfaceKHR surface);
 	void createLogicalDevice();
+
+	void shutdownVulkanEngine();
 
 	VkFormat findDepthFormat();
 	void createSurface(GLFWwindow* window, VkSurfaceKHR& surface);

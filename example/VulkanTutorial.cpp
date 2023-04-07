@@ -163,7 +163,7 @@ private:
 	std::vector<VkE_Buffer> uniformBuffers;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
-	
+	uint32_t mipLevels;
 
 	VkDescriptorPool descriptorPool;
 	VkDescriptorSetLayout descriptorSetLayout;

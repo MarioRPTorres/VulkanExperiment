@@ -461,17 +461,17 @@ void VulkanEngine::pickPhysicalDevice(VkSurfaceKHR surface) {
 	if (physicalDevice == VK_NULL_HANDLE) {
 		throw std::runtime_error("failed to find a suitable GPU!");
 	}
+
+	QueueFamilyIndices queueFamilies = findQueueFamilies(physicalDevice, surface);
+	graphicsFamily = queueFamilies.graphicsFamily.value;
+	transferFamily = queueFamilies.transferFamily.value;
+	mainPresentFamily = queueFamilies.presentFamily.value;
 	// Add the multisample anti-aliasing count
-	msaaSamples = getMaxUsableSampleCount();
+	maxMSAASamples = getMaxUsableSampleCount();
 }
 
 void VulkanEngine::createLogicalDevice() {
 	// Logical devices don't interact directly with instances
-
-	QueueFamilyIndices indices = findQueueFamilies(physicalDevice,mainSurface);
-	if (indices.graphicsFamily.has_value) graphicsFamily = indices.graphicsFamily.value; else throw std::runtime_error("failed to choose graphics queue family!");
-	if (indices.transferFamily.has_value) transferFamily = indices.transferFamily.value; else throw std::runtime_error("failed to choose transfer queue family!");
-	if (indices.presentFamily.has_value) mainPresentFamily = indices.presentFamily.value; else throw std::runtime_error("failed to choose main window present queue family!");
 	
 	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 	// Set of unique Queue Family index values. There is no repetition of indeces in a set.
@@ -1866,4 +1866,13 @@ VkSampleCountFlagBits VulkanEngine::getMaxUsableSampleCount() {
 void VulkanEngine::freeDescriptorSet(VkDescriptorPool pool,VkDescriptorSet& set) {
 	vkFreeDescriptorSets(device, pool, 1, &set);
 	set = VK_NULL_HANDLE;
+};
+
+
+void VulkanEngine::shutdownVulkanEngine() {
+	vkDestroyDevice(device, nullptr);
+	if (enableValidationLayers) {
+		DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+	}
+	vkDestroyInstance(instance, nullptr);
 };
