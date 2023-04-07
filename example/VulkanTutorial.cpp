@@ -164,6 +164,9 @@ private:
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
+
+	VkDescriptorPool descriptorPool;
+	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
 	VkEImgui_Backend imGuiBackEnd;
@@ -173,6 +176,7 @@ private:
 	uint32_t imageIndex;
 	bool framebufferResized = false;
 	bool swapChainOutdated = false;
+	std::array<std::vector<VkDescriptorSet>, MIRROR_DESCRIPTOR_SET_COUNT> descriptorSets;
 	int descriptorGroup = 0;
 
 	void initWindow() {
@@ -238,7 +242,10 @@ private:
 		createTexture(textureImages[1], textures[1]);
 		createTexture(updatedTextureImages[1], updatedTextures[1]);
 
-		createDescriptorPool();
+		createDescriptorPool(descriptorPool, 
+			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT, 
+			mainSwapChain.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
+			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
 		createDescriptorSets();
 		updateDescriptorSet(textureImages, 0);
 		updateDescriptorSet(updatedTextureImages, 1);
@@ -403,8 +410,11 @@ private:
 		createSwapChain(mainSurface,mainSwapChain);
 		createSwapChainImageViews(mainSwapChain);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		createDescriptorPool();
 		createRenderPass(renderPass, mainSwapChain.format, maxMSAASamples, true, !enableImgui, true, true);
+		createDescriptorPool(descriptorPool, 
+			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT, 
+			mainSwapChain.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
+			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
 		createGraphicsPipeline(graphicsPipeline, pipelineLayout,renderPass, vert,frag, PCTVertex::getDescriptions(), descriptorSetLayout, mainSwapChain.extent, maxMSAASamples);
 		createColorResources();
 		createDepthResources();
@@ -455,6 +465,55 @@ private:
 		memcpy(data, &ubo, sizeof(ubo));
 		vkUnmapMemory(device, uniformBuffers[currentImage].memory);
 
+	}
+
+	void createDescriptorSetLayout() {
+		// Create a descriptor which is used by the shader to access resources like images and buffers
+		VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+		uboLayoutBinding.binding = 0;
+		uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		// It is possible for the shader variable
+		// to represent an array of uniform buffer objects, and descriptorCount specifies
+		// the number of values in the array.This could be used to specify a transformation
+		// for each of the bones in a skeleton for skeletal animation, for example.
+		uboLayoutBinding.descriptorCount = 1;
+		uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		// For image sampling related descriptors
+		uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+		VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
+		samplerLayoutBinding.binding = 1;
+		samplerLayoutBinding.descriptorCount = static_cast<uint32_t>(MAX_SAMPLED_IMAGES);
+		samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		samplerLayoutBinding.pImmutableSamplers = nullptr;
+		samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
+		VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+		layoutInfo.pBindings = bindings.data();
+
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create descriptor set layout!");
+		}
+	}
+
+	void createDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(mainSwapChain.imageCount, descriptorSetLayout);
+		VkDescriptorSetAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
+		allocInfo.pSetLayouts = layouts.data();
+
+		for (int i = 0; i < MIRROR_DESCRIPTOR_SET_COUNT; i++) {
+			descriptorSets[i].resize(layouts.size());
+
+			if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets[i].data()) != VK_SUCCESS) {
+				throw std::runtime_error("failed to allocate descriptor sets!");
+			}
+		}
 	}
 
 	void updateDescriptorSet(std::array<VkE_Image, MAX_SAMPLED_IMAGES> images, int groupIndex) {

@@ -172,7 +172,6 @@ protected:
 	VkE_SwapChain mainSwapChain;
 
 	VkRenderPass renderPass;
-	VkDescriptorSetLayout descriptorSetLayout;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
 	VkCommandPool commandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
@@ -183,8 +182,6 @@ protected:
 	std::vector<VkFence>& inFlightFences = syncObjects.inFlightFences;
 	std::vector<VkFence>& imagesInFlight = syncObjects.imagesInFlight;
 
-	VkDescriptorPool descriptorPool;
-	std::array<std::vector<VkDescriptorSet>, MIRROR_DESCRIPTOR_SET_COUNT> descriptorSets;
 	VkImage depthImage;
 	VkDeviceMemory depthImageMemory;
 	VkImageView depthImageView;
@@ -203,15 +200,11 @@ protected:
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-	void createDescriptorSetLayout();
 	
 	// Various Resources
 	void createColorResources();
 	void createDepthResources();
 
-	// Descriptors
-	void createDescriptorPool();
-	void createDescriptorSets();
 	
 
 	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
@@ -251,6 +244,9 @@ public:
 	void createRenderPass(VkRenderPass& renderPass, VkFormat format, VkSampleCountFlagBits msaaSamples, bool firstPass, bool finalPass, bool depthStencil ,bool clearEnable);
 	std::vector<VkFramebuffer> createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment = VK_NULL_HANDLE, VkImageView depthAttachment = VK_NULL_HANDLE);
 	VkShaderModule createShaderModule(const shaderCode& code);
+	
+	// Descriptors
+	void createDescriptorPool(VkDescriptorPool& descriptorPool, uint32_t uniformBufferCount, uint32_t imageSamplersCount,uint32_t maxSets);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
 	// Images
 	void createImage(uint32_t width, uint32_t height,

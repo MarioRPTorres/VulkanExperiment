@@ -812,37 +812,6 @@ void VulkanEngine::createRenderPass(VkRenderPass &renderPass,VkFormat format, Vk
 	}
 }
 
-void VulkanEngine::createDescriptorSetLayout() {
-	// Create a descriptor which is used by the shader to access resources like images and buffers
-	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
-	uboLayoutBinding.binding = 0;
-	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	// It is possible for the shader variable
-	// to represent an array of uniform buffer objects, and descriptorCount specifies
-	// the number of values in the array.This could be used to specify a transformation
-	// for each of the bones in a skeleton for skeletal animation, for example.
-	uboLayoutBinding.descriptorCount = 1;
-	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-	// For image sampling related descriptors
-	uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
-
-	VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
-	samplerLayoutBinding.binding = 1;
-	samplerLayoutBinding.descriptorCount = static_cast<uint32_t>(MAX_SAMPLED_IMAGES);
-	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	samplerLayoutBinding.pImmutableSamplers = nullptr;
-	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-	layoutInfo.pBindings = bindings.data();
-
-	if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create descriptor set layout!");
-	}
-}
 
 VkShaderModule VulkanEngine::createShaderModule(const shaderCode& code) {
 	VkShaderModuleCreateInfo createInfo = {};
@@ -1245,21 +1214,26 @@ uint32_t VulkanEngine::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags
 	throw std::runtime_error("failed to find suitable memory type!");
 }
 
-void VulkanEngine::createDescriptorPool() {
-	std::array<VkDescriptorPoolSize, 2> poolSizes = {};
+void VulkanEngine::createDescriptorPool(VkDescriptorPool& descriptorPool, uint32_t uniformBuffersCount,uint32_t imageSamplersCount,uint32_t maxSets) {
+	std::vector<VkDescriptorPoolSize> poolSizes( (uniformBuffersCount > 0) + (imageSamplersCount > 0) );
+	uint32_t idx = 0;
 	// Pool for uniform buffer
-	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSizes[0].descriptorCount = static_cast<uint32_t>(mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
-
+	if (uniformBuffersCount > 0) {
+		poolSizes[idx].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSizes[idx].descriptorCount = uniformBuffersCount;
+		idx++;
+	}
 	// Pool for combined image sampler
-	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	poolSizes[1].descriptorCount = static_cast<uint32_t>(mainSwapChain.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT);
+	if (imageSamplersCount > 0) {
+		poolSizes[idx].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[idx].descriptorCount = imageSamplersCount;
+	}
 
 	VkDescriptorPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
 	poolInfo.pPoolSizes = poolSizes.data();
-	poolInfo.maxSets = static_cast<uint32_t>(mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
+	poolInfo.maxSets = maxSets;
 	//The structure has an optional flag similar to command pools that determines if
 	//	individual descriptor sets can be freed or not: VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT.
 	//	We’re not going to touch the descriptor set after creating it, so we don’t need
@@ -1268,23 +1242,6 @@ void VulkanEngine::createDescriptorPool() {
 
 	if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create descriptor pool!");
-	}
-}
-
-void VulkanEngine::createDescriptorSets() {
-	std::vector<VkDescriptorSetLayout> layouts(mainSwapChain.imageCount, descriptorSetLayout);
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = descriptorPool;
-	allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
-	allocInfo.pSetLayouts = layouts.data();
-
-	for (int i = 0; i < MIRROR_DESCRIPTOR_SET_COUNT; i++) {
-		descriptorSets[i].resize(layouts.size());
-
-		if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets[i].data()) != VK_SUCCESS) {
-			throw std::runtime_error("failed to allocate descriptor sets!");
-		}
 	}
 }
 
