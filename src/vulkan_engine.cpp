@@ -672,7 +672,16 @@ void VulkanEngine::createSwapChainImageViews(const std::vector<VkImage>& images,
 	}
 }
 
-VkRenderPass VulkanEngine::createRenderPass(VkFormat format, VkSampleCountFlagBits msaaSamples, bool firstPass, bool finalPass, bool depthStencil, bool clearEnable) {
+void VulkanEngine::createSwapChainImageViews(VkE_SwapChain& swapChainDetails){
+	swapChainDetails.imageViews.resize(swapChainDetails.images.size());
+
+	for (size_t i = 0; i < swapChainDetails.images.size(); i++) {
+		swapChainDetails.imageViews[i] = createImageView(swapChainDetails.images[i], swapChainDetails.format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+	}
+}
+
+
+void VulkanEngine::createRenderPass(VkRenderPass &renderPass,VkFormat format, VkSampleCountFlagBits msaaSamples, bool firstPass, bool finalPass, bool depthStencil, bool clearEnable) {
 	bool multipleSamples = msaaSamples > VK_SAMPLE_COUNT_1_BIT;
 
 	// Color Attachment creation
@@ -796,13 +805,10 @@ VkRenderPass VulkanEngine::createRenderPass(VkFormat format, VkSampleCountFlagBi
 	renderPassInfo.dependencyCount = 1;
 	renderPassInfo.pDependencies = &dependency;
 
-	VkRenderPass renderPass;
 	// Here there is a choice for the Allocator function
 	if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create render pass!");
 	}
-
-	return renderPass;
 }
 
 void VulkanEngine::createDescriptorSetLayout() {

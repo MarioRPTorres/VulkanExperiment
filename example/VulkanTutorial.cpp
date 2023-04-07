@@ -201,12 +201,12 @@ private:
 		pickPhysicalDevice();
 		createLogicalDevice();
 		createSwapChain(mainSurface,mainSwapChain);
-		createSwapChainImageViews(swapChainImages, swapChainImageFormat,swapChainImageViews);
+		createSwapChainImageViews(mainSwapChain);
 		if (enableImgui) {
 			VkEImgui_setupBackEnd(imGuiBackEnd, (VulkanEngine*)this, mainSwapChain.minImageCount, mainSwapChain.imageCount,MAX_FRAME_IN_FLIGHT);
 			VkEImgui_createBackEndObjects((VulkanEngine*) this, imGuiBackEnd,imguiInfo);
 		} 
-		renderPass = createRenderPass(mainSwapChain.format, msaaSamples, true, !enableImgui, true,true);
+		createRenderPass(renderPass, mainSwapChain.format, maxMSAASamples, true, !enableImgui, true,true);
 		createDescriptorSetLayout();
 		char2shaderCode(readFile("./vert.spv"),vert);
 		char2shaderCode(readFile("./frag.spv"),frag);
@@ -396,11 +396,11 @@ private:
 
 		// Recreate the swapchain
 		createSwapChain(mainSurface,mainSwapChain);
-		createSwapChainImageViews(swapChainImages, swapChainImageFormat, swapChainImageViews);
+		createSwapChainImageViews(mainSwapChain);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		renderPass = createRenderPass(mainSwapChain.format, msaaSamples, true, !enableImgui, true, true);
 		createDescriptorPool();
 		createGraphicsPipeline(vert,frag, PCTVertex::getDescriptions());
+		createRenderPass(renderPass, mainSwapChain.format, maxMSAASamples, true, !enableImgui, true, true);
 		createColorResources();
 		createDepthResources();
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain, colorImageView, depthImageView);

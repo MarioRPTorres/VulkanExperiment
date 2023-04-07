@@ -93,8 +93,8 @@ private:
 		pickPhysicalDevice();
 		createLogicalDevice();
 		createSwapChain(mainSurface,mainSwapChain);
-		createSwapChainImageViews(swapChainImages,swapChainImageFormat,swapChainImageViews);
-		renderPass = createRenderPass(mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true,false,true);
+		createSwapChainImageViews(mainSwapChain);
+		createRenderPass(renderPass,mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true,false,true);
 
 		std::string vs = "./";
 		vs.append(vertexShader);
@@ -196,9 +196,9 @@ private:
 
 		// Recreate the swapchain
 		createSwapChain(mainSurface, mainSwapChain);
-		createSwapChainImageViews(swapChainImages, swapChainImageFormat, swapChainImageViews);
+		createSwapChainImageViews(mainSwapChain);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		renderPass = createRenderPass(mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true, false, true);
+		createRenderPass(renderPass, mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true, false, true);
 		createGraphicsPipeline(vert, frag);
 		swapChainFramebuffers = createFramebuffers(renderPass, mainSwapChain);
 		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
