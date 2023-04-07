@@ -59,6 +59,8 @@ private:
 	shaderCode vert;
 	shaderCode frag;
 
+
+	size_t inFlightFrameIndex = 0;
 	uint32_t imageIndex;
 	bool swapChainOutdated = false;
 
@@ -89,8 +91,8 @@ private:
 	void initVulkan() {
 		createInstance();
 		setupDebugMessenger();
-		createSurface();
-		pickPhysicalDevice();
+		createSurface(window,mainSurface);
+		pickPhysicalDevice(mainSurface);
 		createLogicalDevice();
 		createSwapChain(mainSurface,mainSwapChain);
 		createSwapChainImageViews(mainSwapChain);
@@ -169,10 +171,10 @@ private:
 		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 		vkDestroyRenderPass(device, renderPass, nullptr);
 
-		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-			vkDestroyImageView(device, swapChainImageViews[i], nullptr);
+		for (size_t i = 0; i < mainSwapChain.imageViews.size(); i++) {
+			vkDestroyImageView(device, mainSwapChain.imageViews[i], nullptr);
 		}
-		vkDestroySwapchainKHR(device, swapChain, nullptr);
+		vkDestroySwapchainKHR(device, mainSwapChain.swapChain, nullptr);
 
 	}
 
@@ -212,7 +214,7 @@ private:
 		// obviously doesn’t matter.Just like vkAcquireNextImageKHR this function also
 		// takes a timeout.Unlike the semaphores, we manually need to restore the fence
 		// to the unsignaled state by resetting it with the vkResetFences call.
-		vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+		vkWaitForFences(device, 1, &inFlightFences[inFlightFrameIndex], VK_TRUE, UINT64_MAX);
 
 		// The drawFrame function perform three operations:
 		//	• Acquire an image from the swap chain
@@ -237,7 +239,7 @@ private:
 		// after a window resize.
 		//• VK_SUBOPTIMAL_KHR : The swap chain can still be used to successfully present to the surface, but the surface properties are no longer matched
 		// exactly.
-		VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &imageIndex);
+		VkResult result = vkAcquireNextImageKHR(device, mainSwapChain.swapChain, UINT64_MAX, imageAvailableSemaphore[inFlightFrameIndex], VK_NULL_HANDLE, &imageIndex);
 
 		// Using the result we can check if the swapchain is out of data and if so we need to recreate it
 		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -254,7 +256,7 @@ private:
 			vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
 		}
 		// Mark the image as now being in use by this frame
-		imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+		imagesInFlight[imageIndex] = inFlightFences[inFlightFrameIndex];
 
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
@@ -270,7 +272,7 @@ private:
 		//the graphics pipeline that writes to the color attachment. That means that theoretically the 
 		//implementation can already start executing our vertex shader and such while the image is not yet available.
 		//Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores.
-		VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[currentFrame] };
+		VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[inFlightFrameIndex] };
 
 		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
@@ -282,15 +284,15 @@ private:
 		submitInfo.commandBufferCount = static_cast<uint32_t>(submitCommmandBuffers.size());
 		submitInfo.pCommandBuffers = submitCommmandBuffers.data();
 
-		VkSemaphore signalSemaphores[] = { renderFinishedSemaphore[currentFrame] };
+		VkSemaphore signalSemaphores[] = { renderFinishedSemaphore[inFlightFrameIndex] };
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = signalSemaphores;
 
-		vkResetFences(device, 1, &inFlightFences[currentFrame]);
+		vkResetFences(device, 1, &inFlightFences[inFlightFrameIndex]);
 
 		// Here we submit the command to draw the triangle.
 		// We also use the current Frame Fence to signal when the command buffer finishes executing, this way we know when a frame is finished
-		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[inFlightFrameIndex]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to submit draw comand buffer!");
 		}
 
@@ -302,9 +304,9 @@ private:
 		//The first two parameters specify which semaphores to wait on before presentation
 		//can happen, just like VkSubmitInfo.
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = &renderFinishedSemaphore[currentFrame];
+		presentInfo.pWaitSemaphores = &renderFinishedSemaphore[inFlightFrameIndex];
 
-		VkSwapchainKHR swapChains[] = { swapChain };
+		VkSwapchainKHR swapChains[] = { mainSwapChain.swapChain };
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = swapChains;
 		presentInfo.pImageIndices = &imageIndex;
@@ -336,7 +338,7 @@ private:
 		// as well as making sure no swapchain images are reused.
 
 		// Syncronization is only done with GPU-GPU not CPU-GPU so more work can still be submitted. Gpu only waits for the previous operation to be ready.
-		currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
+		inFlightFrameIndex = (inFlightFrameIndex + 1) % MAX_FRAME_IN_FLIGHT;
 	}
 
 	void createGraphicsPipeline(shaderCode vert, shaderCode frag) {
@@ -404,8 +406,8 @@ private:
 		VkViewport viewport = {};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width = (float)swapChainExtent.width;
-		viewport.height = (float)swapChainExtent.height;
+		viewport.width = (float)mainSwapChain.extent.width;
+		viewport.height = (float)mainSwapChain.extent.height;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0;
 
@@ -415,7 +417,7 @@ private:
 		// Here we will draw on the entire framebuffer so the scissor should cover all of it.
 		VkRect2D scissor = {};
 		scissor.offset = { 0,0 };
-		scissor.extent = swapChainExtent;
+		scissor.extent = mainSwapChain.extent;
 
 		// Now to combine both the viewport and scissor to a viewport state. 
 		// Multiple viewports and scissors rectangle can be combined on some graphics card hence these will be 
@@ -637,7 +639,7 @@ private:
 		renderPassInfo.renderPass = renderPass;
 		renderPassInfo.framebuffer = frmBuffer;
 		renderPassInfo.renderArea.offset = { 0,0 };
-		renderPassInfo.renderArea.extent = swapChainExtent;
+		renderPassInfo.renderArea.extent = mainSwapChain.extent;
 
 		std::array<VkClearValue, 1> clearValues = {};
 		clearValues[0].color = { 0.0f,0.0f,0.0f,1.0f };
@@ -690,7 +692,7 @@ private:
 			renderPassInfo.renderPass = renderPass;
 			renderPassInfo.framebuffer = swapChainFramebuffers[i];
 			renderPassInfo.renderArea.offset = { 0,0 };
-			renderPassInfo.renderArea.extent = swapChainExtent;
+			renderPassInfo.renderArea.extent = mainSwapChain.extent;
 
 			std::array<VkClearValue, 1> clearValues = {};
 			clearValues[0].color = { 0.0f,0.0f,0.0f,1.0f };

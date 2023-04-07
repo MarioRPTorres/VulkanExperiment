@@ -167,11 +167,6 @@ protected:
 	VkSurfaceKHR mainSurface;
 
 	VkE_SwapChain mainSwapChain;
-	VkSwapchainKHR& swapChain = mainSwapChain.swapChain;
-	std::vector<VkImage>& swapChainImages = mainSwapChain.images;
-	std::vector<VkImageView>& swapChainImageViews = mainSwapChain.imageViews;
-	VkFormat& swapChainImageFormat = mainSwapChain.format;
-	VkExtent2D& swapChainExtent = mainSwapChain.extent;
 
 	VkRenderPass renderPass;
 	VkDescriptorSetLayout descriptorSetLayout;
@@ -188,7 +183,6 @@ protected:
 	std::vector<VkFence>& inFlightFences = syncObjects.inFlightFences;
 	std::vector<VkFence>& imagesInFlight = syncObjects.imagesInFlight;
 
-	size_t currentFrame = 0;
 	VkDescriptorPool descriptorPool;
 	std::array<std::vector<VkDescriptorSet>, MIRROR_DESCRIPTOR_SET_COUNT> descriptorSets;
 	VkImage depthImage;
@@ -205,14 +199,8 @@ protected:
 
 
 	
-	// Initial setup. Not likely to change
-	void createInstance();
-	void setupDebugMessenger();
-	void createSurface();
 	int rateDeviceSuitability(VkPhysicalDevice device);
-	bool isDeviceSuitable(VkPhysicalDevice device);
-	void pickPhysicalDevice();
-	void createLogicalDevice();
+	bool isDeviceSuitable(VkPhysicalDevice device,VkSurfaceKHR surface);
 
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
@@ -250,6 +238,17 @@ protected:
 
 
 public:
+	// Initial setup. Not likely to change
+	void createInstance();
+	void setupDebugMessenger();
+	void pickPhysicalDevice(VkSurfaceKHR surface);
+	void createLogicalDevice();
+
+	void createSurface(GLFWwindow* window, VkSurfaceKHR& surface);
+	inline void destroySurface(VkSurfaceKHR& surface) {
+		vkDestroySurfaceKHR(instance, surface, nullptr);
+	}
+	// SwapChain
 	void createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails);
 	void createSwapChainImageViews(const std::vector<VkImage>& images, const VkFormat format, std::vector<VkImageView>& swapChainImageViews);
 	void createSwapChainImageViews(VkE_SwapChain& swapChainDetails);

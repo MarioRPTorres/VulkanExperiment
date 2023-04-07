@@ -342,7 +342,7 @@ SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurface
 	return details;
 }
 
-bool VulkanEngine::isDeviceSuitable(VkPhysicalDevice device) {
+bool VulkanEngine::isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {
 	// Checks for Properties and Features supported by the device as well as the QueueFamilies attributes
 	//VkPhysicalDeviceProperties deviceProperties;
 	//vkGetPhysicalDeviceProperties(device, &deviceProperties);
@@ -361,7 +361,7 @@ bool VulkanEngine::isDeviceSuitable(VkPhysicalDevice device) {
 	// for certains details to check if it is valid.
 	bool swapChainAdequate = false;
 	if (extensionsSupported) {
-		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device,mainSurface);
+		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device,surface);
 		// For this tutorial is sufficient to have at least one supported Image format and one supported presentation mode
 		// for the given window surface.
 		swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
@@ -371,7 +371,7 @@ bool VulkanEngine::isDeviceSuitable(VkPhysicalDevice device) {
 	VkPhysicalDeviceFeatures supportedFeatures;
 	vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
-	return findQueueFamilies(device,mainSurface).isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
+	return findQueueFamilies(device,surface).isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 }
 
 QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
@@ -424,7 +424,7 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
 	return indices;
 }
 
-void VulkanEngine::pickPhysicalDevice() {
+void VulkanEngine::pickPhysicalDevice(VkSurfaceKHR surface) {
 	// List the available graphics card
 	uint32_t deviceCount = 0;
 	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -450,7 +450,7 @@ void VulkanEngine::pickPhysicalDevice() {
 	}
 #else
 	for (const auto& device : devices) {
-		if (isDeviceSuitable(device)) {
+		if (isDeviceSuitable(device,surface)) {
 			physicalDevice = device;
 			break;
 		}
@@ -1279,10 +1279,10 @@ void VulkanEngine::createDescriptorSets() {
 }
 
 void VulkanEngine::createColorResources() {
-	VkFormat colorFormat = swapChainImageFormat;
+	VkFormat colorFormat = mainSwapChain.format;
 
-	createImage(swapChainExtent.width, swapChainExtent.height,
-		1, msaaSamples,
+	createImage(mainSwapChain.extent.width, mainSwapChain.extent.height,
+		1, maxMSAASamples,
 		colorFormat,
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -1333,8 +1333,8 @@ void VulkanEngine::createDepthResources() {
 
 	VkFormat depthFormat = findDepthFormat();
 
-	createImage(swapChainExtent.width, swapChainExtent.height,
-		1, msaaSamples,
+	createImage(mainSwapChain.extent.width, mainSwapChain.extent.height,
+		1, maxMSAASamples,
 		depthFormat, VK_IMAGE_TILING_OPTIMAL,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage,
