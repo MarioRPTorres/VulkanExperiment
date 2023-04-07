@@ -164,14 +164,11 @@ protected:
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
 	VkQueue transferQueue;
-	VkSurfaceKHR mainSurface;
 
 	VkE_SwapChain mainSwapChain;
 
 	VkRenderPass renderPass;
 	VkDescriptorSetLayout descriptorSetLayout;
-	VkPipelineLayout pipelineLayout;
-	VkPipeline graphicsPipeline;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
 	VkCommandPool commandPool;
 	VkCommandPool transientcommandPool;
@@ -195,9 +192,6 @@ protected:
 	VkImageView colorImageView;
 
 	uint32_t mipLevels;
-	bool framebufferResized = false;
-
-
 	
 	int rateDeviceSuitability(VkPhysicalDevice device);
 	bool isDeviceSuitable(VkPhysicalDevice device,VkSurfaceKHR surface);
@@ -207,9 +201,7 @@ protected:
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 	void createDescriptorSetLayout();
-	// For creating the graphics pipeline
-	void createGraphicsPipeline(shaderCode vert, shaderCode frag, vertexDescriptions vertex);
-
+	
 	// Various Resources
 	void createColorResources();
 	void createDepthResources();
@@ -253,6 +245,14 @@ public:
 	void createSwapChainImageViews(const std::vector<VkImage>& images, const VkFormat format, std::vector<VkImageView>& swapChainImageViews);
 	void createSwapChainImageViews(VkE_SwapChain& swapChainDetails);
 	
+	// For creating the graphics pipeline
+	void createGraphicsPipeline(VkPipeline& graphicsPipeline, VkPipelineLayout& pipelineLayout, 
+		VkRenderPass renderPass, 
+		shaderCode vert, shaderCode frag, 
+		vertexDescriptions vertex, 
+		VkDescriptorSetLayout descriptorSetLayout, 
+		VkExtent2D extent,
+		VkSampleCountFlagBits rasterizationSamples);
 	void createRenderPass(VkRenderPass& renderPass, VkFormat format, VkSampleCountFlagBits msaaSamples, bool firstPass, bool finalPass, bool depthStencil ,bool clearEnable);
 	std::vector<VkFramebuffer> createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment = VK_NULL_HANDLE, VkImageView depthAttachment = VK_NULL_HANDLE);
 	VkShaderModule createShaderModule(const shaderCode& code);

@@ -58,10 +58,13 @@ private:
 	int height = 0;
 	shaderCode vert;
 	shaderCode frag;
+	VkPipeline graphicsPipeline;
+	VkPipelineLayout pipelineLayout;
 
 
 	size_t inFlightFrameIndex = 0;
 	uint32_t imageIndex;
+	bool framebufferResized = false;
 	bool swapChainOutdated = false;
 
 	void initWindow() {

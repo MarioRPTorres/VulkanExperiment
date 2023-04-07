@@ -154,6 +154,7 @@ public:
 		cleanup();
 	}
 private:
+	VkSurfaceKHR mainSurface;
 	shaderCode vert;
 	shaderCode frag;
 	VkE_Buffer vertexBuffer;
@@ -163,11 +164,14 @@ private:
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	
+	VkPipelineLayout pipelineLayout;
+	VkPipeline graphicsPipeline;
 	VkEImgui_Backend imGuiBackEnd;
 	VkEImgui_DeviceObjectsInfo imguiInfo = { false };
 
 	size_t inFlightFrameIndex = 0;
 	uint32_t imageIndex;
+	bool framebufferResized = false;
 	bool swapChainOutdated = false;
 	int descriptorGroup = 0;
 
@@ -211,7 +215,7 @@ private:
 		createDescriptorSetLayout();
 		char2shaderCode(readFile("./vert.spv"),vert);
 		char2shaderCode(readFile("./frag.spv"),frag);
-		createGraphicsPipeline(vert, frag, PCTVertex::getDescriptions());
+		createGraphicsPipeline(graphicsPipeline,pipelineLayout,renderPass, vert, frag, PCTVertex::getDescriptions(), descriptorSetLayout,mainSwapChain.extent,maxMSAASamples);
 		createCommandPool(commandPool,graphicsFamily,0);
 		// If transfer family and graphics family are the same use the same command pool
 		if (graphicsFamily == transferFamily)
@@ -400,8 +404,8 @@ private:
 		createSwapChainImageViews(mainSwapChain);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createDescriptorPool();
-		createGraphicsPipeline(vert,frag, PCTVertex::getDescriptions());
 		createRenderPass(renderPass, mainSwapChain.format, maxMSAASamples, true, !enableImgui, true, true);
+		createGraphicsPipeline(graphicsPipeline, pipelineLayout,renderPass, vert,frag, PCTVertex::getDescriptions(), descriptorSetLayout, mainSwapChain.extent, maxMSAASamples);
 		createColorResources();
 		createDepthResources();
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain, colorImageView, depthImageView);

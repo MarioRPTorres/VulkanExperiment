@@ -184,10 +184,10 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
 //**********************************************************************
 
 void VulkanEngine::cleanupSampledImage(VkE_Image& image) {
-	if (image.sampler != VK_NULL_HANDLE) vkDestroySampler(device, image.sampler, nullptr);
-	if (image.view != VK_NULL_HANDLE) vkDestroyImageView(device, image.view, nullptr);
-	if (image.image != VK_NULL_HANDLE) vkDestroyImage(device, image.image, nullptr);
-	if (image.memory != VK_NULL_HANDLE) vkFreeMemory(device, image.memory, nullptr);
+	if (image.sampler != VK_NULL_HANDLE) { vkDestroySampler(device, image.sampler, nullptr); image.sampler = VK_NULL_HANDLE; }
+	if (image.view != VK_NULL_HANDLE) { vkDestroyImageView(device, image.view, nullptr);  image.view = VK_NULL_HANDLE; }
+	if (image.image != VK_NULL_HANDLE) { vkDestroyImage(device, image.image, nullptr);  image.image = VK_NULL_HANDLE; }
+	if (image.memory != VK_NULL_HANDLE) { vkFreeMemory(device, image.memory, nullptr);  image.memory = VK_NULL_HANDLE; }
 }
 
 void VulkanEngine::createInstance() {
@@ -266,7 +266,7 @@ void VulkanEngine::setupDebugMessenger() {
 	return;
 }
 
-void VulkanEngine::createSurface() {
+void VulkanEngine::createSurface(GLFWwindow* window, VkSurfaceKHR &surface) {
 	// Here a Window Surface object is created for Vulkan to interact the window system. The necessary extensions
 	// were already added by the glfwGetRequiredInstanceExtensions call. While the window surface object is agnostic
 	// its creation isn't. Here the glfw already has a function that handles plataform specific problems for Vulkan
@@ -282,10 +282,11 @@ void VulkanEngine::createSurface() {
 	*/
 
 	// Here there is a choice for the Allocator function
-	if (glfwCreateWindowSurface(instance, window, nullptr, &mainSurface) != VK_SUCCESS) {
+	if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create main window surface!");
 	}
 }
+
 
 #ifdef PHYSICAL_DEVICE_SCORE_SELECTION
 int VulkanEngine::rateDeviceSuitability(VkPhysicalDevice device) {
@@ -863,7 +864,16 @@ VkShaderModule VulkanEngine::createShaderModule(const shaderCode& code) {
 	return shaderModule;
 }
 
-void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag, vertexDescriptions vertex) {
+void VulkanEngine::createGraphicsPipeline(
+	VkPipeline& graphicsPipeline,
+	VkPipelineLayout& pipelineLayout,
+	VkRenderPass renderPass, 
+	shaderCode vert, 
+	shaderCode frag, 
+	vertexDescriptions vertex,
+	VkDescriptorSetLayout descriptorSetLayout,
+	VkExtent2D extent,
+	VkSampleCountFlagBits rasterizationSamples) {
 
 	// Shader modules are only a thin wrapper around the shader bytecode. 
 	// As soon as the graphics pipeline is created the shader modules are no longer needed
@@ -906,8 +916,8 @@ void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag, vert
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
 	vertexInputInfo.pVertexBindingDescriptions = &vertex.binding;
-	vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex.attributes.size());
-	vertexInputInfo.pVertexAttributeDescriptions = vertex.attributes.data();
+	vertexInputInfo.vertexAttributeDescriptionCount = vertex.vertexDescriptionsCount;
+	vertexInputInfo.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription*) vertex.data;
 
 
 	// Input Assembly
@@ -928,8 +938,8 @@ void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag, vert
 	VkViewport viewport = {};
 	viewport.x = 0.0f;
 	viewport.y = 0.0f;
-	viewport.width = (float)swapChainExtent.width;
-	viewport.height = (float)swapChainExtent.height;
+	viewport.width = (float)extent.width;
+	viewport.height = (float)extent.height;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0;
 
@@ -939,7 +949,7 @@ void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag, vert
 	// Here we will draw on the entire framebuffer so the scissor should cover all of it.
 	VkRect2D scissor = {};
 	scissor.offset = { 0,0 };
-	scissor.extent = swapChainExtent;
+	scissor.extent = extent;
 
 	// Now to combine both the viewport and scissor to a viewport state. 
 	// Multiple viewports and scissors rectangle can be combined on some graphics card hence these will be 
@@ -984,7 +994,7 @@ void VulkanEngine::createGraphicsPipeline(shaderCode vert, shaderCode frag, vert
 	VkPipelineMultisampleStateCreateInfo multisampling = {};
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	multisampling.sampleShadingEnable = VK_FALSE;
-	multisampling.rasterizationSamples = msaaSamples;
+	multisampling.rasterizationSamples = rasterizationSamples;
 	multisampling.minSampleShading = 1.0f; // Optional
 	multisampling.pSampleMask = nullptr; // Optional
 	multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -1231,7 +1241,7 @@ uint32_t VulkanEngine::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags
 			return i;
 		}
 	}
-
+	
 	throw std::runtime_error("failed to find suitable memory type!");
 }
 
