@@ -46,7 +46,8 @@ const std::vector<const char*> deviceExtensions = {
 };
 
 // ****************** Datatypes ********************
-typedef std::vector<uint32_t> shaderCode;
+typedef std::vector<uint8_t> shaderCode8;
+typedef std::vector<uint32_t> shaderCode32;
 
 typedef struct _VkE_Image {
 	VkImage image = VK_NULL_HANDLE;
@@ -131,7 +132,7 @@ struct vertexDescriptions {
 };
 
 // *************** Other Functions *************
-void char2shaderCode(std::vector<char> inCharVector, shaderCode& outShaderCode);
+void char2shaderCode(std::vector<char> inCharVector, shaderCode32& outShaderCode);
 
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 
@@ -151,13 +152,13 @@ class VulkanEngine
 	 * construction calls with the `new` operator.
 	 */
 public: 
-	VkDevice device;
-	VkCommandPool transientcommandPool;
+	VkDevice device = VK_NULL_HANDLE;
+	VkCommandPool transientcommandPool = VK_NULL_HANDLE;
 	uint32_t graphicsFamily; // Graphics queue family
 	uint32_t transferFamily; // Transfer queue family
-	VkQueue graphicsQueue;
-	VkQueue presentQueue;
-	VkQueue transferQueue;
+	VkQueue graphicsQueue = VK_NULL_HANDLE;
+	VkQueue presentQueue = VK_NULL_HANDLE;
+	VkQueue transferQueue = VK_NULL_HANDLE;
 	VkSampleCountFlagBits maxMSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
 protected:
@@ -172,7 +173,6 @@ protected:
 	VkRenderPass renderPass;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
 	VkCommandPool commandPool;
-	std::vector<VkCommandBuffer> commandBuffers;
 
 	VkE_FrameSyncObjects syncObjects;
 	std::vector<VkSemaphore>& imageAvailableSemaphore = syncObjects.imageAvailableSemaphore;
@@ -210,6 +210,7 @@ protected:
 	
 	VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 	VkSampleCountFlagBits getMaxUsableSampleCount();
+	VkShaderModule createShaderModuleRaw(uint32_t* data,size_t size);
 
 
 public:
@@ -232,17 +233,23 @@ public:
 	void createSwapChainImageViews(VkE_SwapChain& swapChainDetails);
 	
 	// For creating the graphics pipeline
-	void createGraphicsPipeline(VkPipeline& graphicsPipeline, VkPipelineLayout& pipelineLayout, 
-		VkRenderPass renderPass, 
-		shaderCode vert, shaderCode frag, 
-		vertexDescriptions vertex, 
-		VkDescriptorSetLayout descriptorSetLayout, 
+	void createGraphicsPipeline(VkPipeline& graphicsPipeline, VkPipelineLayout& pipelineLayout,
+		VkRenderPass renderPass,
+		VkShaderModule vertShaderModule,
+		VkShaderModule fragShaderModule,
+		vertexDescriptions vertex,
+		VkDescriptorSetLayout descriptorSetLayout,
 		VkExtent2D extent,
 		VkSampleCountFlagBits rasterizationSamples);
 	void createRenderPass(VkRenderPass& renderPass, VkFormat format, VkSampleCountFlagBits msaaSamples, bool firstPass, bool finalPass, bool depthStencil ,bool clearEnable);
 	std::vector<VkFramebuffer> createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment = VK_NULL_HANDLE, VkImageView depthAttachment = VK_NULL_HANDLE);
-	VkShaderModule createShaderModule(const shaderCode& code);
-	
+	inline VkShaderModule createShaderModule(shaderCode8 code) {
+		return createShaderModuleRaw((uint32_t*)code.data(), code.size() * sizeof(code.at(0)));
+	};
+	inline VkShaderModule createShaderModule(shaderCode32 code) {
+		return createShaderModuleRaw((uint32_t*)code.data(), code.size() * sizeof(code.at(0)));
+	};
+
 	// Descriptors
 	void createDescriptorPool(VkDescriptorPool& descriptorPool, uint32_t uniformBufferCount, uint32_t imageSamplersCount,uint32_t maxSets);
 	void freeDescriptorSet(VkDescriptorPool pool, VkDescriptorSet& set);
@@ -318,7 +325,7 @@ protected:
 	VkCommandPool commandPool = VK_NULL_HANDLE;
 
 	bool ClearEnable = false;
-	VkClearValue clearValue;
+	VkClearValue clearValue = {};
 
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 	uint32_t mipLevels = 1;

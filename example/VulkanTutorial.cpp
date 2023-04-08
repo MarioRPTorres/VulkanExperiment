@@ -158,8 +158,8 @@ public:
 	}
 private:
 	VkSurfaceKHR mainSurface;
-	shaderCode vert;
-	shaderCode frag;
+	VkShaderModule vert;
+	VkShaderModule frag;
 	VkE_Buffer vertexBuffer;
 	VkE_Buffer indexBuffer;
 	uint32_t indexCount = 0;
@@ -174,6 +174,7 @@ private:
 	VkPipeline graphicsPipeline;
 	VkEImgui_Backend imGuiBackEnd;
 	VkEImgui_DeviceObjectsInfo imguiInfo = { false };
+	std::vector<VkCommandBuffer> commandBuffers;
 
 	size_t inFlightFrameIndex = 0;
 	uint32_t imageIndex;
@@ -220,8 +221,13 @@ private:
 		} 
 		createRenderPass(renderPass, mainSwapChain.format, maxMSAASamples, true, !enableImgui, true,true);
 		createDescriptorSetLayout();
-		char2shaderCode(readFile("./vert.spv"),vert);
-		char2shaderCode(readFile("./frag.spv"),frag);
+		shaderCode32 vertShaderCode;
+		shaderCode32 fragShaderCode;
+		char2shaderCode(readFile("./vert.spv"), vertShaderCode);
+		char2shaderCode(readFile("./frag.spv"), fragShaderCode);
+
+		vert = createShaderModule(vertShaderCode);
+		frag = createShaderModule(fragShaderCode);
 		createGraphicsPipeline(graphicsPipeline,pipelineLayout,renderPass, vert, frag, PCTVertex::getDescriptions(), descriptorSetLayout,mainSwapChain.extent,maxMSAASamples);
 		createCommandPool(commandPool,graphicsFamily,0);
 		// If transfer family and graphics family are the same use the same command pool
@@ -323,6 +329,9 @@ private:
 
 	void cleanup() {
 		cleanupSwapChain();
+
+		vkDestroyShaderModule(device, vert, nullptr);
+		vkDestroyShaderModule(device, frag, nullptr);
 
 		cleanupSampledImage(textureImages[0]);
 		cleanupSampledImage(textureImages[1]);

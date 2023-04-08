@@ -56,10 +56,12 @@ public:
 private:
 	int width = 0;
 	int height = 0;
-	shaderCode vert;
-	shaderCode frag;
+	shaderCode32 vert;
+	shaderCode32 frag;
 	VkPipeline graphicsPipeline;
 	VkPipelineLayout pipelineLayout;
+	std::vector<VkCommandBuffer> commandBuffers;
+	VkSurfaceKHR mainSurface;
 
 
 	size_t inFlightFrameIndex = 0;
@@ -344,7 +346,7 @@ private:
 		inFlightFrameIndex = (inFlightFrameIndex + 1) % MAX_FRAME_IN_FLIGHT;
 	}
 
-	void createGraphicsPipeline(shaderCode vert, shaderCode frag) {
+	void createGraphicsPipeline(shaderCode32 vert, shaderCode32 frag) {
 
 		// Shader modules are only a thin wrapper around the shader bytecode. 
 		// As soon as the graphics pipeline is created the shader modules are no longer needed

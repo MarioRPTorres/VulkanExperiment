@@ -4,10 +4,10 @@
 //**********************************************************************
 
 //**************************** Helper Functions ****************************
-void char2shaderCode(std::vector<char> inCharVector, shaderCode& outShaderCode) {
+void char2shaderCode(std::vector<char> inCharVector, shaderCode32& outShaderCode) {
 	outShaderCode.clear();
 	size_t intCount = (int)(inCharVector.size() * sizeof(char) / sizeof(uint32_t));
-	outShaderCode = shaderCode((uint32_t*)inCharVector.data(), (uint32_t*)inCharVector.data() + intCount);
+	outShaderCode = shaderCode32((uint32_t*)inCharVector.data(), (uint32_t*)inCharVector.data() + intCount);
 	return;
 }
 
@@ -812,14 +812,13 @@ void VulkanEngine::createRenderPass(VkRenderPass &renderPass,VkFormat format, Vk
 	}
 }
 
-
-VkShaderModule VulkanEngine::createShaderModule(const shaderCode& code) {
+VkShaderModule VulkanEngine::createShaderModuleRaw(uint32_t* data, size_t size) {
 	VkShaderModuleCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-	createInfo.codeSize = code.size() * sizeof(code.at(0));
+	createInfo.codeSize = size;
 	// The byte code must be in uint32_t format with the same alignment requirements. Luckily the std::vector
 	// default allocator already meet the worst case alignment requirements.
-	createInfo.pCode = code.data();
+	createInfo.pCode = data;
 
 	VkShaderModule shaderModule;
 	// Here there is a choice for the Allocator function
@@ -837,8 +836,8 @@ void VulkanEngine::createGraphicsPipeline(
 	VkPipeline& graphicsPipeline,
 	VkPipelineLayout& pipelineLayout,
 	VkRenderPass renderPass, 
-	shaderCode vert, 
-	shaderCode frag, 
+	VkShaderModule vertShaderModule,
+	VkShaderModule fragShaderModule,
 	vertexDescriptions vertex,
 	VkDescriptorSetLayout descriptorSetLayout,
 	VkExtent2D extent,
@@ -848,8 +847,7 @@ void VulkanEngine::createGraphicsPipeline(
 	// As soon as the graphics pipeline is created the shader modules are no longer needed
 	// hence these can be made as local variables instead of class members. They must be 
 	// destroyed by as call of vkDestroyShaderModule
-	VkShaderModule vertShaderModule = createShaderModule(vert);
-	VkShaderModule fragShaderModule = createShaderModule(frag);
+
 
 	VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
 	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1036,8 +1034,8 @@ void VulkanEngine::createGraphicsPipeline(
 	// Can be specified at the pipeline creation with a VkPipelineLayout object. This is required with or without using uniform values.
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 1;
-	pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+	pipelineLayoutInfo.setLayoutCount = (descriptorSetLayout == VK_NULL_HANDLE ? 0 : 1);
+	pipelineLayoutInfo.pSetLayouts = (descriptorSetLayout == VK_NULL_HANDLE ? nullptr : &descriptorSetLayout);;
 	pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
 	pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
@@ -1089,10 +1087,6 @@ void VulkanEngine::createGraphicsPipeline(
 	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create graphics pipeline");
 	}
-
-	// Here there is a choice for the Allocator function
-	vkDestroyShaderModule(device, fragShaderModule, nullptr);
-	vkDestroyShaderModule(device, vertShaderModule, nullptr);
 }
 
 std::vector<VkFramebuffer> VulkanEngine::createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment, VkImageView depthAttachment) {
