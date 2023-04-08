@@ -15,7 +15,8 @@ models/
 
 # Exclude Libraries
 libs/*
+python/groupHexadecimal/*
 
 # Exceptionally add the CMakeLists.txt in libs folder
 !libs/CMakeLists.txt
-
+!python/groupHexadecimal/groupHexadecimal.py
