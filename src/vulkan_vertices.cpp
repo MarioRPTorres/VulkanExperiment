@@ -3,7 +3,6 @@
 
 namespace constants
 {
-	// actual global variables
 	extern const std::array<VkVertexInputAttributeDescription, 4> PCTVertexAttributes{ {
 		{
 			0, // location
@@ -27,4 +26,25 @@ namespace constants
 			offsetof(PCTVertex,texId) // offset
 		},
 }};
+	extern const std::array<VkVertexInputAttributeDescription, 2> CP2VertexAttributes{{
+		{
+			0, // location
+			0, // binding
+			VK_FORMAT_R32G32B32_SFLOAT, // format
+			offsetof(CP2Vertex,color) // offset
+		},{
+			1, // location
+			0, // binding
+			VK_FORMAT_R32G32_SFLOAT, // format
+			offsetof(CP2Vertex,pos) // offset
+		}
+} };
+	extern const std::array<VkVertexInputAttributeDescription, 1> P2VertexAttributes{ {
+	{
+		0, // location
+		0, // binding
+		VK_FORMAT_R32G32_SFLOAT, // format
+		offsetof(P2Vertex,pos) // offset
+	}
+} };
 }

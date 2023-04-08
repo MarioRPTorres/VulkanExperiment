@@ -5,6 +5,7 @@ set(BUILD_MAIN_EXAMPLE TRUE)
 set(BUILD_EXTRA_EXAMPLES FALSE)
 set(BUILD_SHADERTOY_EXAMPLE TRUE)
 set(BUILD_POINTSDRAWING_EXAMPLE TRUE)
+set(BUILD_MULTIPLEWINDOWS_EXAMPLE TRUE)
  
 # Set Target Name
 set(PROJECT_TARGET VulkanEngine)
@@ -252,6 +253,14 @@ if (BUILD_POINTSDRAWING_EXAMPLE)
 	    example/PointsDrawing.cpp
     )
     CONFIGUREEXAMPLETARGET(PointsDrawing TRUE TRUE)
+endif()
+
+if (BUILD_MULTIPLEWINDOWS_EXAMPLE)
+    # Create the Vulkan Tutorial application target using the main.cpp example 
+    add_executable( MultipleWindows 
+	    example/MultipleWindows.cpp
+    )
+    CONFIGUREEXAMPLETARGET(MultipleWindows TRUE TRUE)
 endif()
 
 if (BUILD_EXTRA_EXAMPLES)

@@ -20,8 +20,65 @@
 namespace constants
 {
 	// actual global variables
+	extern const std::array<VkVertexInputAttributeDescription, 1> P2VertexAttributes;
+	extern const std::array<VkVertexInputAttributeDescription, 2> CP2VertexAttributes;
 	extern const std::array<VkVertexInputAttributeDescription, 4> PCTVertexAttributes;
 }
+
+struct P2Vertex {
+	alignas(8) glm::vec2 pos;
+
+	static VkVertexInputBindingDescription getBindingDescription() {
+		// Binding Description tells the rate at which vertex data is coming in
+		VkVertexInputBindingDescription bindingDescription = {};
+		bindingDescription.binding = 0;								// Binding index of this binding in the binding array
+		bindingDescription.stride = sizeof(P2Vertex);					// Stride between each vertex data 
+		// � VK_VERTEX_INPUT_RATE_VERTEX : Move to the next data entry after each vertex
+		// � VK_VERTEX_INPUT_RATE_INSTANCE : Move to the next data entry after each instance
+		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		return bindingDescription;
+	}
+	bool operator==(const P2Vertex& other) const {
+		return pos == other.pos;
+	}
+
+	static vertexDescriptions getDescriptions() {
+		return vertexDescriptions({
+			getBindingDescription(),
+			constants::P2VertexAttributes.data(),
+			constants::P2VertexAttributes.size()
+			});
+	}
+};
+
+
+struct CP2Vertex {
+	alignas(16) glm::vec3 color;
+	alignas(8) glm::vec2 pos;
+
+	static VkVertexInputBindingDescription getBindingDescription() {
+		// Binding Description tells the rate at which vertex data is coming in
+		VkVertexInputBindingDescription bindingDescription = {};
+		bindingDescription.binding = 0;								// Binding index of this binding in the binding array
+		bindingDescription.stride = sizeof(CP2Vertex);					// Stride between each vertex data 
+		// � VK_VERTEX_INPUT_RATE_VERTEX : Move to the next data entry after each vertex
+		// � VK_VERTEX_INPUT_RATE_INSTANCE : Move to the next data entry after each instance
+		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		return bindingDescription;
+	}
+	bool operator==(const CP2Vertex& other) const {
+		return pos == other.pos && color == other.color;
+	}
+
+	static vertexDescriptions getDescriptions() {
+		return vertexDescriptions({
+			getBindingDescription(),
+			constants::CP2VertexAttributes.data(),
+			constants::CP2VertexAttributes.size()
+			});
+	}
+};
+
 
 struct PCTVertex {
 	alignas(16) glm::vec3 pos;
