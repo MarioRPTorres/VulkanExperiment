@@ -377,7 +377,7 @@ void VkEImgui_CreateViewportSwapBufferObjects(VkEImgui_Viewport* vp) {
 	// Create Frame Buffers
 	vp->frameBuffers = vk->createFramebuffers(vp->renderPass, vp->sc);
 	// Create Command Buffers x
-	vp->commandBuffers = vk->createCommandBuffers(vp->commandPool, vp->sc.imageCount);
+	vp->commandBuffers = vk->createCommandBuffers(vp->commandPool, vp->sc.imageCount,true);
 	// Create Sync Objects
 	vk->createSyncObjects(vp->syncObjects, vp->sc.imageCount);
 	vp->vertexBuffers.resize(vp->sc.imageCount);
@@ -842,7 +842,7 @@ void VkEImgui_createBackEndObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEI
 	//VkEImgui_CreatePipelineLayout(&imBd);
 	//VkEImgui_CreatePipeline(&imBd);
 
-	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount);
+	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount,true);
 	vk->createRenderPass(imBd.renderPass ,sc->format, VK_SAMPLE_COUNT_1_BIT, info.firstPass, true,false,info.firstPass);
 	imBd.frameBuffers = vk->createFramebuffers(imBd.renderPass, *sc);
 }
@@ -987,7 +987,7 @@ void recreateImguiSwapChainObjects(VkEImgui_Backend& imBd, VkEImgui_DeviceObject
 
 	ImGui_ImplVulkan_SetMinImageCount(sc->minImageCount);
 	vk->createRenderPass(imBd.renderPass, sc->format, VK_SAMPLE_COUNT_1_BIT, info.firstPass, true,false, info.firstPass);
-	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount);
+	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount,true);
 	imBd.frameBuffers = vk->createFramebuffers(imBd.renderPass, *sc);
 }
 

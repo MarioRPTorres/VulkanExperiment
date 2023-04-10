@@ -67,8 +67,8 @@ public:
 		cleanup();
 	}
 private:
-	shaderCode vert;
-	shaderCode frag;
+	VkShaderModule vertShader = VK_NULL_HANDLE;
+	VkShaderModule fragShader = VK_NULL_HANDLE;
 	VkE_Buffer vertexBuffer;
 	VkE_Buffer indexBuffer;
 	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
@@ -115,9 +115,13 @@ private:
 		vk->createSwapChainImageViews(sc.images, sc.format, sc.imageViews);
 		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, true, true, true);
 		createDescriptorSetLayout();
+		shaderCode32 vert;
+		shaderCode32 frag;
 		char2shaderCode(readFile("./vert.spv"), vert);
 		char2shaderCode(readFile("./frag.spv"), frag);
-		vk->createGraphicsPipeline(pipeline, pipelineLayout,renderPass, vert, frag, PCTVertex::getDescriptions(),descriptorSetLayout,sc.extent,msaaSamples);
+		vertShader = vk->createShaderModule(vert);
+		fragShader = vk->createShaderModule(frag);
+		vk->createGraphicsPipeline(pipeline, pipelineLayout,renderPass, vertShader, fragShader, PCTVertex::getDescriptions(),nullptr,descriptorSetLayout,sc.extent,msaaSamples);
 		vk->createCommandPool(commandPool, vk->graphicsFamily, 0);
 		// If transfer family and graphics family are the same use the same command pool
 		if (vk->graphicsFamily == vk->transferFamily)
@@ -133,7 +137,7 @@ private:
 		vk->createVertexBuffer(vertices.data(), vertices.size() * sizeof(vertices[0]), vertexBuffer);
 		vk->createIndexBuffer(indices.data(), indices.size() * sizeof(indices[0]), indexBuffer);
 		indexCount = static_cast<uint32_t>(indices.size());
-		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size());
+		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(),true);
 		createUniformBuffers();
 
 		vk->createDescriptorPool(descriptorPool, sc.imageCount ,0,sc.imageCount);
@@ -165,6 +169,8 @@ private:
 	void cleanup() {
 		cleanupSwapChain();
 
+		if (vertShader != VK_NULL_HANDLE) { vkDestroyShaderModule(vk->device, vertShader, nullptr); vertShader = VK_NULL_HANDLE; }
+		if (fragShader != VK_NULL_HANDLE) { vkDestroyShaderModule(vk->device, fragShader, nullptr); fragShader = VK_NULL_HANDLE; }
 		// Here there is a choice for the Allocator function
 		vkDestroyDescriptorSetLayout(vk->device, descriptorSetLayout, nullptr);
 		// Here there is a choice for the Allocator function
@@ -236,14 +242,14 @@ private:
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, true, true, true);
 		vk->createDescriptorPool(descriptorPool, sc.imageCount, 0, sc.imageCount);
-		vk->createGraphicsPipeline(pipeline, pipelineLayout,renderPass, vert, frag, PCTVertex::getDescriptions(),descriptorSetLayout,sc.extent,msaaSamples);
+		vk->createGraphicsPipeline(pipeline, pipelineLayout,renderPass, vertShader, fragShader, PCTVertex::getDescriptions(),nullptr,descriptorSetLayout,sc.extent,msaaSamples);
 		createColorResources();
 		createDepthResources();
 		frameBuffers = vk->createFramebuffers(renderPass, sc, msaaColorImage.view, depthImage.view);
 		createUniformBuffers();
 		createDescriptorSets();
 		updateDescriptorSet();
-		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size());
+		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(),true);
 		writeCommandBuffers();
 	}
 

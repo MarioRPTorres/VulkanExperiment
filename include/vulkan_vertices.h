@@ -23,6 +23,7 @@ namespace constants
 	extern const std::array<VkVertexInputAttributeDescription, 1> P2VertexAttributes;
 	extern const std::array<VkVertexInputAttributeDescription, 2> CP2VertexAttributes;
 	extern const std::array<VkVertexInputAttributeDescription, 4> PCTVertexAttributes;
+	const vertexDescriptions NullVertexDescriptions({ {}, nullptr, 0 });
 }
 
 struct P2Vertex {

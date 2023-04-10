@@ -114,9 +114,7 @@ private:
 		createGraphicsPipeline(vert, frag);
 		createShaderToyCommandPool();
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain);
-		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
-		// Write the command buffers after the descriptor sets are updated
-		//writeCommandBuffers();
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(),true);
 		createSyncObjects(syncObjects, mainSwapChain.imageCount);
 	}
 
@@ -208,8 +206,7 @@ private:
 		createRenderPass(renderPass, mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true, false, true);
 		createGraphicsPipeline(vert, frag);
 		swapChainFramebuffers = createFramebuffers(renderPass, mainSwapChain);
-		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
-		//writeCommandBuffers();
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(),true);
 	}
 
 	void drawFrame() {

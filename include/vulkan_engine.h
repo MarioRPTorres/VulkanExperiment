@@ -238,6 +238,7 @@ public:
 		VkShaderModule vertShaderModule,
 		VkShaderModule fragShaderModule,
 		vertexDescriptions vertex,
+		std::vector<VkPushConstantRange>* pushConstants,
 		VkDescriptorSetLayout descriptorSetLayout,
 		VkExtent2D extent,
 		VkSampleCountFlagBits rasterizationSamples);
@@ -283,7 +284,7 @@ public:
 
 	// Command Buffers
 	void createCommandPool(VkCommandPool& pool, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags);
-	std::vector<VkCommandBuffer> createCommandBuffers(const VkCommandPool commandPool, uint32_t buffersCount);
+	std::vector<VkCommandBuffer> createCommandBuffers(const VkCommandPool commandPool, uint32_t buffersCount, bool primary);
 	VkCommandBuffer beginSingleTimeCommands();
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 	// Syncronization objects

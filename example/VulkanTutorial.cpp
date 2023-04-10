@@ -228,7 +228,7 @@ private:
 
 		vert = createShaderModule(vertShaderCode);
 		frag = createShaderModule(fragShaderCode);
-		createGraphicsPipeline(graphicsPipeline,pipelineLayout,renderPass, vert, frag, PCTVertex::getDescriptions(), descriptorSetLayout,mainSwapChain.extent,maxMSAASamples);
+		createGraphicsPipeline(graphicsPipeline,pipelineLayout,renderPass, vert, frag, PCTVertex::getDescriptions(),nullptr, descriptorSetLayout,mainSwapChain.extent,maxMSAASamples);
 		createCommandPool(commandPool,graphicsFamily,0);
 		// If transfer family and graphics family are the same use the same command pool
 		if (graphicsFamily == transferFamily)
@@ -244,7 +244,7 @@ private:
 		createVertexBuffer(vertices.data(),vertices.size()*sizeof(vertices[0]), vertexBuffer);
 		createIndexBuffer(indices.data(),indices.size()*sizeof(indices[0]),indexBuffer);
 		indexCount = static_cast<uint32_t>(indices.size());
-		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(),true);
 		createUniformBuffers();
 		createTexture(textureImages[0], textures[0]);
 		createTexture(updatedTextureImages[0], updatedTextures[0]);
@@ -427,7 +427,7 @@ private:
 			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT, 
 			mainSwapChain.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
 			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
-		createGraphicsPipeline(graphicsPipeline, pipelineLayout,renderPass, vert,frag, PCTVertex::getDescriptions(), descriptorSetLayout, mainSwapChain.extent, maxMSAASamples);
+		createGraphicsPipeline(graphicsPipeline, pipelineLayout,renderPass, vert,frag, PCTVertex::getDescriptions(),nullptr, descriptorSetLayout, mainSwapChain.extent, maxMSAASamples);
 		createColorResources();
 		createDepthResources();
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain, colorImageView, depthImageView);
@@ -435,7 +435,7 @@ private:
 		createDescriptorSets();
 		updateDescriptorSet(textureImages, 0);
 		updateDescriptorSet(updatedTextureImages, 1);
-		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size());
+		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(), true);
 		writeCommandBuffers();
 		if (enableImgui) {
 			recreateImguiSwapChainObjects(imGuiBackEnd, imguiInfo);

@@ -839,6 +839,7 @@ void VulkanEngine::createGraphicsPipeline(
 	VkShaderModule vertShaderModule,
 	VkShaderModule fragShaderModule,
 	vertexDescriptions vertex,
+	std::vector<VkPushConstantRange>* pushConstants,
 	VkDescriptorSetLayout descriptorSetLayout,
 	VkExtent2D extent,
 	VkSampleCountFlagBits rasterizationSamples) {
@@ -881,10 +882,18 @@ void VulkanEngine::createGraphicsPipeline(
 	// and per-vertex and per-instance information.
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.pVertexBindingDescriptions = &vertex.binding;
-	vertexInputInfo.vertexAttributeDescriptionCount = vertex.vertexDescriptionsCount;
-	vertexInputInfo.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription*) vertex.data;
+	if (vertex.vertexDescriptionsCount == 0) {
+		vertexInputInfo.vertexBindingDescriptionCount = 0;
+		vertexInputInfo.pVertexBindingDescriptions = nullptr;
+		vertexInputInfo.vertexAttributeDescriptionCount = 0;
+		vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+	}
+	else {
+		vertexInputInfo.vertexBindingDescriptionCount = 1;
+		vertexInputInfo.pVertexBindingDescriptions = &vertex.binding;
+		vertexInputInfo.vertexAttributeDescriptionCount = vertex.vertexDescriptionsCount;
+		vertexInputInfo.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription*) vertex.data;
+	}
 
 
 	// Input Assembly
@@ -1035,9 +1044,15 @@ void VulkanEngine::createGraphicsPipeline(
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutInfo.setLayoutCount = (descriptorSetLayout == VK_NULL_HANDLE ? 0 : 1);
-	pipelineLayoutInfo.pSetLayouts = (descriptorSetLayout == VK_NULL_HANDLE ? nullptr : &descriptorSetLayout);;
-	pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
-	pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
+	pipelineLayoutInfo.pSetLayouts = (descriptorSetLayout == VK_NULL_HANDLE ? nullptr : &descriptorSetLayout);
+	if (pushConstants == nullptr) {
+		pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
+		pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
+	}
+	else {
+		pipelineLayoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstants->size());
+		pipelineLayoutInfo.pPushConstantRanges = pushConstants->data();
+	}
 
 	// Here there is a choice for the Allocator function
 	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
@@ -1136,7 +1151,7 @@ void VulkanEngine::createCommandPool(VkCommandPool& pool, uint32_t queueFamilyIn
 	}
 }
 
-std::vector<VkCommandBuffer> VulkanEngine::createCommandBuffers(const VkCommandPool commandPool,uint32_t buffersCount) {
+std::vector<VkCommandBuffer> VulkanEngine::createCommandBuffers(const VkCommandPool commandPool,uint32_t buffersCount,bool primary) {
 	
 	std::vector<VkCommandBuffer> commandBuffers(buffersCount, VK_NULL_HANDLE);
 
@@ -1145,7 +1160,7 @@ std::vector<VkCommandBuffer> VulkanEngine::createCommandBuffers(const VkCommandP
 	allocInfo.commandPool = commandPool;
 	//• VK_COMMAND_BUFFER_LEVEL_PRIMARY : Can be submitted to a queue for execution, but cannot be called from other command buffers.
 	//• VK_COMMAND_BUFFER_LEVEL_SECONDARY : Cannot be submitted directly, but can be called from primary command buffers.
-	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.level = (primary ? VK_COMMAND_BUFFER_LEVEL_PRIMARY : VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 	allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
 	if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS) {

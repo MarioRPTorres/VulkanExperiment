@@ -203,7 +203,7 @@ public:
 
 		vertShaderModule = vk->createShaderModule(vert);
 		fragShaderModule = vk->createShaderModule(frag);
-		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vertShaderModule, fragShaderModule, P2Vertex::getDescriptions(), VK_NULL_HANDLE, sc.extent, msaaSamples);
+		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vertShaderModule, fragShaderModule, P2Vertex::getDescriptions(), nullptr, VK_NULL_HANDLE, sc.extent, msaaSamples);
 		vk->createCommandPool(commandPool, vk->graphicsFamily, 0);
 		// If transfer family and graphics family are the same use the same command pool
 		if (vk->graphicsFamily == vk->transferFamily && vk->transientcommandPool==VK_NULL_HANDLE)
@@ -217,7 +217,7 @@ public:
 		vk->createVertexBuffer(vertices.data(), vertices.size() * sizeof(vertices[0]), vertexBuffer);
 		vk->createIndexBuffer(indices.data(), indices.size() * sizeof(indices[0]), indexBuffer);
 		indexCount = static_cast<uint32_t>(indices.size());
-		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size());
+		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(),true);
 
 		// Write the command buffers after the descriptor sets are updated
 		writeCommandBuffers();
@@ -300,9 +300,9 @@ public:
 		vk->createSwapChainImageViews(sc.images, sc.format, sc.imageViews);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, true, false, true);
-		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vertShaderModule, fragShaderModule, P2Vertex::getDescriptions(), VK_NULL_HANDLE, sc.extent, msaaSamples);
+		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vertShaderModule, fragShaderModule, P2Vertex::getDescriptions(),nullptr, VK_NULL_HANDLE, sc.extent, msaaSamples);
 		frameBuffers = vk->createFramebuffers(renderPass, sc);
-		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size());
+		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(),true);
 		writeCommandBuffers();
 	}
 
