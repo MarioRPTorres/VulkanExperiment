@@ -1,4 +1,5 @@
 #include "vulkan_engine.h"
+#include "vulkan_vertices.h"
 #include <chrono>
 
 //#include <fstream>
@@ -56,8 +57,8 @@ public:
 private:
 	int width = 0;
 	int height = 0;
-	shaderCode32 vert;
-	shaderCode32 frag;
+	VkShaderModule vert;
+	VkShaderModule frag;
 	VkPipeline graphicsPipeline;
 	VkPipelineLayout pipelineLayout;
 	std::vector<VkCommandBuffer> commandBuffers;
@@ -109,10 +110,23 @@ private:
 		std::string fs = "./";
 		fs.append(fragShader);
 		fs.append(".spv");
-		char2shaderCode(readFile(vs), vert);
-		char2shaderCode(readFile(fs), frag);
-		createGraphicsPipeline(vert, frag);
-		createShaderToyCommandPool();
+		shaderCode32 vertCode, fragCode;
+		char2shaderCode(readFile(vs), vertCode);
+		char2shaderCode(readFile(fs), fragCode);
+		vert = createShaderModule(vertCode);
+		frag = createShaderModule(fragCode);
+		std::vector<VkPushConstantRange> push(1, { VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(PushConstants) });
+		createGraphicsPipeline(graphicsPipeline, pipelineLayout, renderPass, vert, frag, constants::NullVertexDescriptions, &push, VK_NULL_HANDLE, mainSwapChain.extent, VK_SAMPLE_COUNT_1_BIT);
+
+		createCommandPool(commandPool, graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+		// If transfer family and graphics family are the same use the same command pool
+		if (graphicsFamily == transferFamily)
+			transientcommandPool = commandPool;
+		else {
+			// Transfer Challenge & Transient Command Pool Challenge:
+			// Create a transient pool for short lived command buffers for memory allocation optimizations.
+			createCommandPool(transientcommandPool, transferFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+		}
 		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain);
 		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(),true);
 		createSyncObjects(syncObjects, mainSwapChain.imageCount);
@@ -139,6 +153,8 @@ private:
 	void cleanup() {
 		cleanupSwapChain();
 
+		if (vert != VK_NULL_HANDLE) { vkDestroyShaderModule(device, vert, nullptr); vert = VK_NULL_HANDLE; }
+		if (frag != VK_NULL_HANDLE) { vkDestroyShaderModule(device, frag, nullptr); frag = VK_NULL_HANDLE; }
 
 		for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
 			// Here there is a choice for the Allocator function
@@ -204,7 +220,8 @@ private:
 		createSwapChainImageViews(mainSwapChain);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		createRenderPass(renderPass, mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true, false, true);
-		createGraphicsPipeline(vert, frag);
+		std::vector<VkPushConstantRange> push(1, { VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(PushConstants) });
+		createGraphicsPipeline(graphicsPipeline, pipelineLayout, renderPass, vert, frag, constants::NullVertexDescriptions, &push, VK_NULL_HANDLE, mainSwapChain.extent, VK_SAMPLE_COUNT_1_BIT);
 		swapChainFramebuffers = createFramebuffers(renderPass, mainSwapChain);
 		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(),true);
 	}
@@ -343,289 +360,6 @@ private:
 		inFlightFrameIndex = (inFlightFrameIndex + 1) % MAX_FRAME_IN_FLIGHT;
 	}
 
-	void createGraphicsPipeline(shaderCode32 vert, shaderCode32 frag) {
-
-		// Shader modules are only a thin wrapper around the shader bytecode. 
-		// As soon as the graphics pipeline is created the shader modules are no longer needed
-		// hence these can be made as local variables instead of class members. They must be 
-		// destroyed by as call of vkDestroyShaderModule
-		VkShaderModule vertShaderModule = createShaderModule(vert);
-		VkShaderModule fragShaderModule = createShaderModule(frag);
-
-		VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
-		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		// Tells which pipeline stage the shader is going to be used.
-		vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-		vertShaderStageInfo.module = vertShaderModule;
-		vertShaderStageInfo.pName = "main";
-		/*	There is one more(optional) member, pSpecializationInfo, which we won’t
-			be using here, but is worth discussing.It allows you to specify values for shader
-			constants.You can use a single shader module where its behavior can be configured
-			at pipeline creation by specifying different values for the constants used in
-			it.This is more efficient than configuring the shader using variables at render
-			time, because the compiler can do optimizations like eliminating if statements
-			that depend on these values.*/
-		vertShaderStageInfo.pSpecializationInfo = nullptr;
-
-		// Now the same for the fragment shader
-		VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
-		fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		// Tells which pipeline stage the shader is going to be used.
-		fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-		fragShaderStageInfo.module = fragShaderModule;
-		fragShaderStageInfo.pName = "main";
-
-		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,fragShaderStageInfo };
-
-
-		// Prebuilt Fixed Functions Stage
-		// Vertex Input
-		// This stage tells how to load the vertex data and describes the format of the atributes as well spacing 
-		// and per-vertex and per-instance information.
-		VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
-		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertexInputInfo.vertexBindingDescriptionCount = 0;
-		vertexInputInfo.pVertexBindingDescriptions = nullptr;
-		vertexInputInfo.vertexAttributeDescriptionCount = 0;
-		vertexInputInfo.pVertexAttributeDescriptions = nullptr;
-
-
-		// Input Assembly
-		VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
-		inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-		//		VK_PRIMITIVE_TOPOLOGY_POINT_LIST: points from vertices
-		//		VK_PRIMITIVE_TOPOLOGY_LINE_LIST : line from every 2 vertices without reuse
-		//		VK_PRIMITIVE_TOPOLOGY_LINE_STRIP : the end vertex of every line is used as start vertex for the next line
-		//		VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : triangle from every 3 vertices without reuse
-		//		VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : the second and third vertex of every triangle are used as first two
-		//	vertices of the next triangle
-		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-		// Viewports
-		// A viewport basically describes the region of the framebuffer that the output will
-		// be rendered to.This will almost always be(0, 0) to (width, height)
-		VkViewport viewport = {};
-		viewport.x = 0.0f;
-		viewport.y = 0.0f;
-		viewport.width = (float)mainSwapChain.extent.width;
-		viewport.height = (float)mainSwapChain.extent.height;
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0;
-
-		// Scissor 
-		// Describes which pixels will actually be stored. In essence cuts the display of the framebuffer
-		// including the viewport region.
-		// Here we will draw on the entire framebuffer so the scissor should cover all of it.
-		VkRect2D scissor = {};
-		scissor.offset = { 0,0 };
-		scissor.extent = mainSwapChain.extent;
-
-		// Now to combine both the viewport and scissor to a viewport state. 
-		// Multiple viewports and scissors rectangle can be combined on some graphics card hence these will be 
-		// passed as array. It requires enabling a GPU Feature in logical device creation.
-		VkPipelineViewportStateCreateInfo viewportState = {};
-		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-		viewportState.viewportCount = 1;
-		viewportState.pViewports = &viewport;
-		viewportState.scissorCount = 1;
-		viewportState.pScissors = &scissor;
-
-		// Rasterizer
-		VkPipelineRasterizationStateCreateInfo rasterizer = {};
-		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-		// If this is true then fragments beyond the near and far plane are clamped instead of discarded. 
-		// Useful for things like shadow maps. It requires enabling a GPU Feature in logical device creation.
-		rasterizer.depthClampEnable = VK_FALSE;
-		// This if true disables any output to the framebuffer. The Geometry never passes through the rasterizer stage.
-		rasterizer.rasterizerDiscardEnable = VK_FALSE;
-		// VK_POLYGON_MODE_FILL: fill the area of the polygon with fragments
-		// VK_POLYGON_MODE_LINE : polygon edges are drawn as lines
-		// VK_POLYGON_MODE_POINT : polygon vertices are drawn as points
-		// Using any mode other than fill requires enabling a GPU feature.
-		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-		// Any line thicker than 1.0f requires you to enable the wideLines GPU feature.
-		rasterizer.lineWidth = 1.0f;
-
-		// A whole buttload of configurations
-		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-		// Here changes which faces to show of triangles
-		// Can be:
-		// - VK_FRONT_FACE_CLOCKWISE
-		// - VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		rasterizer.depthBiasClamp = VK_FALSE;
-		rasterizer.depthBiasConstantFactor = 0.0f; // Optional
-		rasterizer.depthBiasClamp = 0.0f; // Optional
-		rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
-
-		// MultiSampling
-		// It requires enabling a GPU Feature in logical device creation.
-		VkPipelineMultisampleStateCreateInfo multisampling = {};
-		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-		multisampling.sampleShadingEnable = VK_FALSE;
-		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-		multisampling.minSampleShading = 1.0f; // Optional
-		multisampling.pSampleMask = nullptr; // Optional
-		multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
-		multisampling.alphaToOneEnable = VK_FALSE; // Optional
-
-		// Depth and stencil testing
-		// Not used right now so only a nullptr will be passed
-
-		// Color Blending struct describing the operation
-		VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-		colorBlendAttachment.blendEnable = VK_FALSE;
-		colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-		colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-		colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-		colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-		colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-		colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-
-		// // Pseudo Code explaining the above struct
-		//if (blendEnable) {
-		//	finalColor.rgb = (srcColorBlendFactor * newColor.rgb)
-		//		< colorBlendOp > (dstColorBlendFactor * oldColor.rgb);
-		//	finalColor.a = (srcAlphaBlendFactor * newColor.a) < alphaBlendOp >
-		//		(dstAlphaBlendFactor * oldColor.a);
-		//}
-		//else {
-		//	finalColor = newColor;
-		//}
-		//finalColor = finalColor & colorWriteMask;
-
-		// Alpha Blending
-		//finalColor.rgb = newAlpha * newColor + (1 - newAlpha) * oldColor;
-		//finalColor.a = newAlpha.a;
-		// The struct that acomplishes it
-		//colorBlendAttachment.blendEnable = VK_TRUE;
-		//colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-		//colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-		//colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-		//colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-		//colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-		//colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-
-		// Struct to gather all color blend for all of the framebuffers
-		VkPipelineColorBlendStateCreateInfo colorBlending = {};
-		colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-		colorBlending.logicOpEnable = VK_FALSE;
-		colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
-		colorBlending.attachmentCount = 1;
-		colorBlending.pAttachments = &colorBlendAttachment;
-		colorBlending.blendConstants[0] = 0.0f; // Optional
-		colorBlending.blendConstants[1] = 0.0f; // Optional
-		colorBlending.blendConstants[2] = 0.0f; // Optional
-		colorBlending.blendConstants[3] = 0.0f; // Optional
-
-
-		// Dynamic States
-		// Some states can be changed without recreating the pipeline like viewport, linewidth and blend constants
-		// The dynamic states can be created like this.
-		//VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_LINE_WIDTH};
-		//VkPipelineDynamicStateCreateInfo dynamicState = {};
-		//dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-		//dynamicState.dynamicStateCount = 2;
-		//dynamicState.pDynamicStates = dynamicStates;
-
-		//setup push constants
-		VkPushConstantRange push_constant;
-		//this push constant range starts at the beginning
-		push_constant.offset = 0;
-		//this push constant range takes up the size of a MeshPushConstants struct
-		push_constant.size = sizeof(PushConstants);
-		//this push constant range is accessible only in the vertex shader
-		push_constant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		// Uniform values in shaders are similar to dynamics states. Can be changed at drawing time to alter shaders
-		// without recreating them. Most commonly used for transformation matrix and texture samplers.
-		// Can be specified at the pipeline creation with a VkPipelineLayout object. This is required with or without using uniform values.
-		VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 0;
-		pipelineLayoutInfo.pSetLayouts = nullptr;
-		pipelineLayoutInfo.pushConstantRangeCount = 1; 
-		pipelineLayoutInfo.pPushConstantRanges = &push_constant;
-
-		// Here there is a choice for the Allocator function
-		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create pipeline layout!");
-		}
-
-
-		VkGraphicsPipelineCreateInfo pipelineInfo = {};
-		pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-		// Shaders
-		pipelineInfo.stageCount = 2;
-		pipelineInfo.pStages = shaderStages;
-		// Fixed Functions
-		pipelineInfo.pVertexInputState = &vertexInputInfo;
-		pipelineInfo.pInputAssemblyState = &inputAssembly;
-		pipelineInfo.pViewportState = &viewportState;
-		pipelineInfo.pRasterizationState = &rasterizer;
-		pipelineInfo.pMultisampleState = &multisampling;
-		// A depth stencil state must always be specified if the render pass contains a depth stencil attachment
-		pipelineInfo.pDepthStencilState = nullptr; // Optional
-		pipelineInfo.pColorBlendState = &colorBlending;
-		pipelineInfo.pDynamicState = nullptr; // Optional
-		// Layout
-		pipelineInfo.layout = pipelineLayout;
-		// Render Pass
-		pipelineInfo.renderPass = renderPass;
-		pipelineInfo.subpass = 0;
-		// Vulkan allows you to create a new graphics pipeline by deriving from an existing pipeline.
-		// These values are only used if the VK_PIPELINE_CREATE_DERIVATIVE_BIT flag
-		// is also specified in the flags field of VkGraphicsPipelineCreateInfo.
-		pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
-		pipelineInfo.basePipelineIndex = -1; // Optional
-
-		// Multiple graphics pipeline can be created at the sametime;
-		// Here there is a choice for the Allocator functio
-		if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create graphics pipeline");
-		}
-
-		// Here there is a choice for the Allocator function
-		vkDestroyShaderModule(device, fragShaderModule, nullptr);
-		vkDestroyShaderModule(device, vertShaderModule, nullptr);
-	}
-
-	void createShaderToyCommandPool() {
-
-		VkCommandPoolCreateInfo poolInfo = {};
-		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		poolInfo.queueFamilyIndex = graphicsFamily;
-		// Command Pool Flags
-		//• VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new 
-		//	commands very often(may change memory allocation behavior)
-		//• VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : Allow command buffers to be rerecorded 
-		//	individually, without this flag they all have to be reset together
-		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // Optional
-
-		// Here there is a choice for the Allocator function
-		if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create command pool!");
-		}
-
-		if (graphicsFamily == transferFamily)
-			transientcommandPool = commandPool;
-		else {
-			// Transfer Challenge & Transient Command Pool Challenge:
-			// Create a transient pool for short lived command buffers for memory allocation optimizations.
-			VkCommandPoolCreateInfo transientpoolInfo = {};
-			transientpoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-			transientpoolInfo.queueFamilyIndex = transferFamily;
-			transientpoolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-
-			// Here there is a choice for the Allocator function
-			if (vkCreateCommandPool(device, &transientpoolInfo, nullptr, &transientcommandPool) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create transient command pool!");
-			}
-		}
-	}
-
 	void writeCommandBuffer(VkCommandBuffer cmd,VkFramebuffer frmBuffer,PushConstants constants) {
 		vkResetCommandBuffer(cmd, 0);
 
@@ -663,82 +397,6 @@ private:
 
 		if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
 			throw std::runtime_error("failed to record command buffer!");
-		}
-	}
-
-	void writeCommandBuffers() {
-
-		vkResetCommandPool(device, commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
-		for (size_t i = 0; i < commandBuffers.size(); i++) {
-
-			VkCommandBufferBeginInfo beginInfo = {};
-			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			//• VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT : The command buffer will be rerecorded right after 
-			//	executing it once.
-			//• VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : This is a secondary command buffer that will be 
-			//	entirely within a single render pass.
-			//• VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also 
-			//	already pending execution.
-			beginInfo.flags = 0; // OPtional
-			//  The pInheritanceInfo parameter is only relevant for secondary command
-			//	buffers.It specifies which state to inherit from the calling primary command
-			//	buffers.
-			beginInfo.pInheritanceInfo = nullptr; // Optional
-
-			if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
-				throw std::runtime_error("failed to begin recording command buffer!");
-			}
-
-			VkRenderPassBeginInfo renderPassInfo = {};
-			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			renderPassInfo.renderPass = renderPass;
-			renderPassInfo.framebuffer = swapChainFramebuffers[i];
-			renderPassInfo.renderArea.offset = { 0,0 };
-			renderPassInfo.renderArea.extent = mainSwapChain.extent;
-
-			std::array<VkClearValue, 1> clearValues = {};
-			clearValues[0].color = { 0.0f,0.0f,0.0f,1.0f };
-
-			//Note that the order of clearValues should be identical to the order of your attachments in the subpass. 
-			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-			renderPassInfo.pClearValues = clearValues.data();
-
-			//All of the functions that record commands can be recognized by their vkCmd prefix.
-
-			//• VK_SUBPASS_CONTENTS_INLINE : The render pass commands will be embedded in the primary command 
-			//	buffer itself and no secondary command buffers will be executed.
-			//• VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : The render pass commands will be executed
-			//	from secondary command buffers.
-			vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-			vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-
-			//• vertexCount : Even though we don’t have a vertex buffer, we technically
-			//	still have 3 vertices to draw.
-			//• instanceCount : Used for instanced rendering, use 1 if you’re not doing
-			//	that.
-			//• firstVertex : Used as an offset into the vertex buffer, defines the lowest
-			//	value of gl_VertexIndex.
-			//• firstInstance : Used as an offset for instanced rendering, defines the
-			//	lowest value of gl_InstanceIndex.
-			//vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
-			// EDIT: The previous commented was for a hard coded vertices in the shader. The application now allocates a vertex buffer outside
-			// and copys the vertices data from the application to the buffer
-
-
-			// Descriptor Set bindings.ffs
-			//vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &(descriptorSets[descriptorGroup][i]), 0, nullptr);
-			// Draw Vertex
-			vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
-			// Indexed Vertex Draw
-			//vkCmdDrawIndexed(commandBuffers[i], indexCount, 1, 0, 0, 0);
-
-
-			vkCmdEndRenderPass(commandBuffers[i]);
-
-			if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
-				throw std::runtime_error("failed to record command buffer!");
-			}
 		}
 	}
 };
