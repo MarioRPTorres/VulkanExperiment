@@ -50,7 +50,7 @@ def main():
             if (i+lineStep < len(uint)):
                 line = line + ",\n"
             fo.write(line)
-    #os.remove(shaderCodePath)
+    os.remove(shaderCodePath)
 
 if __name__=="__main__":
     main()
