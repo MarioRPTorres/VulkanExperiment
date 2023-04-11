@@ -8,6 +8,31 @@ struct VkEImgui_vertexBuffers {
 	VkE_Buffer index;
 };
 
+//! @brief Struct for Windows owned by the main application.
+// TO DO: Currently main window viewport struct
+//struct VkEImgui_OwnedViewPorts {
+//	GLFWwindow* window = nullptr;
+//	VkSurfaceKHR surface = VK_NULL_HANDLE; // Not used in main window
+//	VkE_SwapChain sc; // Not used in main window
+//	std::vector<VkFramebuffer> frameBuffers;
+//	std::vector<VkCommandBuffer> commandBuffers;
+//	VkCommandPool commandPool;
+//	bool ClearEnable;
+//	bool WindowOwned = false;
+//	std::vector<VkEImgui_vertexBuffers> vertexBuffers;
+//
+//	VkClearValue clearValue;
+//	bool swapChainOutdated = false;
+//	uint32_t imageIndex = 0;
+//	uint32_t inFlightFrameIndex = 0; // Not used in main window
+//
+//	VkRenderPass renderPass;
+//	VkPipeline pipeline;
+//	float width;
+//	float height;
+//};
+
+//! @brief Struct for Imgui generated windows (Undocked windows created by Imgui)
 struct VkEImgui_Viewport {
 	GLFWwindow* window = nullptr; // Not used in main window
 	VkSurfaceKHR surface = VK_NULL_HANDLE; // Not used in main window
@@ -35,33 +60,32 @@ struct VkEImgui_Viewport {
 struct VkEImgui_Backend {
 	VulkanEngine* engine = VK_NULL_HANDLE;
 	VkE_Image fontSImage;
+	VkSampler fontSampler = VK_NULL_HANDLE;
 	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 	VkDescriptorSet fontDescriptorSet = VK_NULL_HANDLE;
-	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-	VkPipelineCache pipelineCache = VK_NULL_HANDLE;
 	VkShaderModule ShaderModuleVert = VK_NULL_HANDLE;
 	VkShaderModule ShaderModuleFrag = VK_NULL_HANDLE;
+	VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+
+	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+	VkPipeline pipeline = VK_NULL_HANDLE;
+	
 
 	VkAllocationCallbacks* allocator = nullptr;
 	VkPipelineCreateFlags pipelineCreateFlags = 0;
-	uint32_t minImageCount;
-	uint32_t imageCount;
 	uint32_t maxFramesInFlight = 0;
 	VkDeviceSize BufferMemoryAlignment;
 
 	// Main Window renderer objects
-	VkRenderPass renderPass = VK_NULL_HANDLE;
-	VkPipeline pipeline = VK_NULL_HANDLE;
-	std::vector<VkFramebuffer> frameBuffers;
-	VkCommandPool commandPool = VK_NULL_HANDLE;
-	std::vector<VkCommandBuffer> commandBuffers;
+	//VkRenderPass renderPass = VK_NULL_HANDLE;
+	//std::vector<VkFramebuffer> frameBuffers;
+	//VkCommandPool commandPool = VK_NULL_HANDLE;
+	//std::vector<VkCommandBuffer> commandBuffers;
 
-	// Viewport Renderer common objects
-	//VkRenderPass vpRenderPass = VK_NULL_HANDLE;
-	//VkPipeline vpPipeline = VK_NULL_HANDLE;
 	// Viewports
 	VkEImgui_Viewport mainViewport;
+	bool mainViewportFirstPass = true;
 	std::vector<VkEImgui_Viewport*> viewports = {};
 
 	VkEImgui_Backend()
@@ -71,19 +95,16 @@ struct VkEImgui_Backend {
 	}
 };
 
-struct VkEImgui_DeviceObjectsInfo {
-	bool firstPass = false;
-};
-
 void check_vk_result(VkResult err); 
 
-void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk, uint32_t minImageCount, uint32_t imageCount, uint32_t maxFramesInFlight);
-void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imguiBackEnd);
-void VkEImgui_createBackEndObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEImgui_DeviceObjectsInfo info);
-void VkEImgui_addDefaultFont(VkEImgui_Backend& imBd);
+void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk,GLFWwindow* window, VkE_SwapChain sc, bool firstPass, uint32_t maxFramesInFlight);
+void VkEImgui_createBackEndObjects(VkEImgui_Backend& imBd);
+void VkEImgui_init(VkEImgui_Backend& imguiBackEnd);
+void VkEImgui_addDefaultFont(VkEImgui_Backend* imBd);
+void VkEImgui_setCustomFontFromFileTTF(VkEImgui_Backend* bd, std::string fontFilePath, float fontSize);
 void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imObj);
 void VkEImgui_cleanupSwapChain(VkEImgui_Backend& imObj);
-void recreateImguiSwapChainObjects(VkEImgui_Backend& imObj, VkEImgui_DeviceObjectsInfo info);
+void recreateImguiSwapChainObjects(VkEImgui_Backend& imObj, VkE_SwapChain sc, bool firstPass, uint32_t maxFramesInFlight);
 void VkEImgui_CreatePipeline(VkEImgui_Backend* bd);
 void VkEImgui_Shutdown();
 

@@ -110,6 +110,7 @@ static shaderCode32 __glsl_shader_frag_spv =
 
 ///***************************************************************************************************//
 static VkEImgui_Backend* VkEImgui_GetBackendData();
+static void VkEImgui_CreateFontSampler(VkEImgui_Backend* bd);
 static void VkEImgui_CreateDescriptorSetLayout(VkEImgui_Backend* bd);
 static void VkEImgui_CreatePipelineLayout(VkEImgui_Backend* bd);
 static void VkEImgui_CreatePipeline(VkEImgui_Backend* bd);
@@ -400,10 +401,11 @@ static void VkEImgui_CreateWindow(ImGuiViewport* viewport)
 	// create the shader modules 
 	if (bd->ShaderModuleVert == VK_NULL_HANDLE) bd->ShaderModuleVert = vk->createShaderModule(__glsl_shader_vert_spv);
 	if (bd->ShaderModuleFrag == VK_NULL_HANDLE) bd->ShaderModuleFrag = vk->createShaderModule(__glsl_shader_frag_spv);
+	VkEImgui_CreateFontSampler(bd);
 	VkEImgui_CreateDescriptorSetLayout(bd);
 	VkEImgui_CreatePipelineLayout(bd);
 	// Create Command pool x
-	vk->createCommandPool(vp->commandPool, vkBd.graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+	vk->createCommandPool(vp->commandPool, vk->graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
 	// Create surface
 	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
@@ -632,15 +634,38 @@ static VkEImgui_Backend* VkEImgui_GetBackendData()
 	return ImGui::GetCurrentContext() ? (VkEImgui_Backend*)ImGui::GetIO().BackendRendererUserData : NULL;
 }
 
+
+
+static void VkEImgui_CreateFontSampler(VkEImgui_Backend* bd)
+{
+	if (bd->fontSampler)
+		return;
+
+	// Bilinear sampling is required by default. Set 'io.Fonts->Flags |= ImFontAtlasFlags_NoBakedLines' or 'style.AntiAliasedLinesUseTex = false' to allow point/nearest sampling.
+	VkSamplerCreateInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	info.magFilter = VK_FILTER_LINEAR;
+	info.minFilter = VK_FILTER_LINEAR;
+	info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	info.minLod = -1000;
+	info.maxLod = 1000;
+	info.maxAnisotropy = 1.0f;
+	VkResult err = vkCreateSampler(bd->engine->device, &info, nullptr, &bd->fontSampler);
+	check_vk_result(err);
+}
+
 static void VkEImgui_CreateDescriptorSetLayout(VkEImgui_Backend* bd) {
 	if (bd->descriptorSetLayout != VK_NULL_HANDLE)
 		return;
 
-	VkDevice device = bd->engine->getBackEndData().device;
+	VkDevice device = bd->engine->device;
 
-	IM_ASSERT(bd->fontSImage.sampler != VK_NULL_HANDLE && "Need to create a vulkan image sampler. FontImage Sampler is not set!");
+	VkEImgui_CreateFontSampler(bd);
 
-	VkSampler sampler[1] = { bd->fontSImage.sampler };
+	VkSampler sampler[1] = { bd->fontSampler };
 	VkDescriptorSetLayoutBinding binding[1] = {};
 	binding[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	binding[0].descriptorCount = 1;
@@ -661,8 +686,9 @@ static void VkEImgui_CreatePipelineLayout(VkEImgui_Backend* bd)
 
 	VkDevice device = bd->engine->getBackEndData().device;
 
-	// Constants: we are using 'vec2 offset' and 'vec2 scale' instead of a full 3d projection matrix
 	VkEImgui_CreateDescriptorSetLayout(bd);
+
+	// Constants: we are using 'vec2 offset' and 'vec2 scale' instead of a full 3d projection matrix
 	VkPushConstantRange push_constants[1] = {};
 	push_constants[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	push_constants[0].offset = sizeof(float) * 0;
@@ -683,7 +709,10 @@ static void VkEImgui_CreatePipeline(VkEImgui_Backend* bd)
 	if (bd->pipeline != VK_NULL_HANDLE)
 		return;
 
+
 	VulkanBackEndData vk = bd->engine->getBackEndData();
+	IM_ASSERT(bd->mainViewport.renderPass && "MainViewPort/Imgui RenderPass not created");
+	VkEImgui_CreatePipelineLayout(bd);
 
 	VkPipelineShaderStageCreateInfo stage[2] = {};
 	stage[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -765,8 +794,6 @@ static void VkEImgui_CreatePipeline(VkEImgui_Backend* bd)
 	dynamic_state.dynamicStateCount = (uint32_t)IM_ARRAYSIZE(dynamic_states);
 	dynamic_state.pDynamicStates = dynamic_states;
 
-	VkEImgui_CreatePipelineLayout(bd);
-
 	VkGraphicsPipelineCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	info.flags = bd->pipelineCreateFlags;
@@ -781,23 +808,26 @@ static void VkEImgui_CreatePipeline(VkEImgui_Backend* bd)
 	info.pColorBlendState = &blend_info;
 	info.pDynamicState = &dynamic_state;
 	info.layout = bd->pipelineLayout;
-	info.renderPass = bd->renderPass;
+	info.renderPass = bd->mainViewport.renderPass;
 	info.subpass = 0;
 	VkResult err = vkCreateGraphicsPipelines(vk.device, bd->pipelineCache, 1, &info, bd->allocator, &bd->pipeline);
 	check_vk_result(err);
 }
 
-void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk, uint32_t minImageCount, uint32_t imageCount, uint32_t maxFramesInFlight) 
+
+void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk, GLFWwindow* window, VkE_SwapChain sc, bool firstPass, uint32_t maxFramesInFlight)
 {
 	bd.engine = vk;
-	bd.minImageCount = minImageCount;
-	bd.imageCount = imageCount;
+	bd.mainViewport.window = window;
+	bd.mainViewport.sc = sc;
+	bd.mainViewportFirstPass = firstPass;
 	bd.maxFramesInFlight = maxFramesInFlight;
 }
 
-void VkEImgui_createBackEndObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEImgui_DeviceObjectsInfo info) {
-	VulkanBackEndData vkBackend = imBd.engine->getBackEndData();
-	VkE_SwapChain* sc = imBd.engine->getSwapChainDetails();
+void VkEImgui_createBackEndObjects(VkEImgui_Backend& imBd) {
+	IM_ASSERT(imBd.engine && "Imgui Backend Engine is NULL. Did you call VkEImgui_setupBackEnd?");
+	VulkanEngine* vk = imBd.engine;
+	VkE_SwapChain* sc = vk->getSwapChainDetails();
 
 	// **************** Descriptor Pool ************************
 	VkDescriptorPoolSize pool_sizes[] =
@@ -815,7 +845,6 @@ void VkEImgui_createBackEndObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEI
 		{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
 	};
 
-
 	uint32_t pool_sizes_count = (int)(sizeof(pool_sizes) / sizeof(*pool_sizes));
 	VkDescriptorPoolCreateInfo descriptorPoolInfo = {};
 	descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -823,41 +852,28 @@ void VkEImgui_createBackEndObjects(VulkanEngine* vk, VkEImgui_Backend& imBd,VkEI
 	descriptorPoolInfo.maxSets = 1000 * pool_sizes_count;
 	descriptorPoolInfo.poolSizeCount = pool_sizes_count;
 	descriptorPoolInfo.pPoolSizes = pool_sizes;
-
-	if (vkCreateDescriptorPool(vkBackend.device, &descriptorPoolInfo, nullptr, &imBd.descriptorPool) != VK_SUCCESS) {
+	if (vkCreateDescriptorPool(vk->device, &descriptorPoolInfo, nullptr, &imBd.descriptorPool) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create imgui descriptor pool!");
 	}
 
-
-	//	individually, without this flag they all have to be reset together
-	vk->createCommandPool(imBd.commandPool, vkBackend.graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-
-	// Create core objects
-	//ImGui_ImplVulkan_CreateDeviceObjects(vk,bd);
-
-
 	if (!imBd.ShaderModuleVert) imBd.ShaderModuleVert = vk->createShaderModule(__glsl_shader_vert_spv);
 	if (!imBd.ShaderModuleFrag) imBd.ShaderModuleFrag = vk->createShaderModule(__glsl_shader_frag_spv);
-	//VkEImgui_CreateDescriptorSetLayout(&imBd);
-	//VkEImgui_CreatePipelineLayout(&imBd);
-	//VkEImgui_CreatePipeline(&imBd);
 
-	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount,true);
-	vk->createRenderPass(imBd.renderPass ,sc->format, VK_SAMPLE_COUNT_1_BIT, info.firstPass, true,false,info.firstPass);
-	imBd.frameBuffers = vk->createFramebuffers(imBd.renderPass, *sc);
+	VkEImgui_CreateDescriptorSetLayout(&imBd);
+	VkEImgui_CreatePipelineLayout(&imBd);
 }
 
-void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imBd) {
+void VkEImgui_init(VkEImgui_Backend& imBd) {
 	IM_ASSERT(imBd.engine != nullptr && "Invalid VulkanEngine. Was VkEImgui_setupBackEnd called?");
-	IM_ASSERT(imBd.minImageCount >= 2 && "Invalid minimum image count. Was VkEImgui_setupBackEnd called?");
-	IM_ASSERT(imBd.imageCount >= imBd.minImageCount && "Image count lower than minimum image count");
+	IM_ASSERT(imBd.mainViewport.sc.minImageCount >= 2 && "Invalid minimum image count. Was VkEImgui_setupBackEnd called?");
+	IM_ASSERT(imBd.mainViewport.sc.imageCount >= imBd.mainViewport.sc.minImageCount && "Image count lower than minimum image count");
+
+	VulkanEngine* vk = imBd.engine;
 	//IM_ASSERT(imBd.descriptorPool != VK_NULL_HANDLE);
 	//IM_ASSERT(imBd.descriptorSetLayout != VK_NULL_HANDLE);
 	//IM_ASSERT(imBd.pipelineLayout != VK_NULL_HANDLE);
 	//IM_ASSERT(imBd.pipeline != VK_NULL_HANDLE);
 	//IM_ASSERT(imBd.renderPass != VK_NULL_HANDLE);
-	VulkanBackEndData vkBackend = imBd.engine->getBackEndData();
-	VkE_SwapChain* sc = imBd.engine->getSwapChainDetails();
 
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
@@ -884,7 +900,6 @@ void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imBd) {
 	}
 
 	// Setup Platform/Renderer bindings
-	ImGui_ImplGlfw_InitForVulkan(vkBackend.window, true);
 	//ImGui_ImplVulkan_InitInfo init_info = {};
 	//init_info.Instance = vkBackend.instance;
 	//init_info.PhysicalDevice = vkBackend.physicalDevice;
@@ -906,37 +921,32 @@ void VkEImgui_init(VulkanEngine* vk, VkEImgui_Backend& imBd) {
 	io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;  // We can create multi-viewports on the Renderer side (optional)
 
 
-	//IM_ASSERT(init_info.Instance != VK_NULL_HANDLE);
-	//IM_ASSERT(init_info.PhysicalDevice != VK_NULL_HANDLE);
+
 	//IM_ASSERT(init_info.Device != VK_NULL_HANDLE);
 	//IM_ASSERT(init_info.Queue != VK_NULL_HANDLE);
+	//	individually, without this flag they all have to be reset together
+	VkEImgui_Viewport* mvp = &imBd.mainViewport;
 
+	// Setup Binding for Main Window
+	ImGui_ImplGlfw_InitForVulkan(mvp->window, true);
+	vk->createCommandPool(mvp->commandPool, vk->graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+	mvp->commandBuffers = vk->createCommandBuffers(mvp->commandPool, mvp->sc.imageCount, true);
+	vk->createRenderPass(mvp->renderPass, mvp->sc.format, VK_SAMPLE_COUNT_1_BIT, imBd.mainViewportFirstPass, true, false, imBd.mainViewportFirstPass);
+	mvp->frameBuffers = vk->createFramebuffers(mvp->renderPass, mvp->sc);
 
-	imBd.mainViewport.sc = *sc;
 	// Our render function expect RendererUserData to be storing the window render buffer we need (for the main viewport we won't use ->Window)
 	ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-	main_viewport->RendererUserData = &imBd.mainViewport;
+	main_viewport->RendererUserData = mvp;
 
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 		VkEImgui_InitPlatformInterface();//ImGui_ImplVulkan_InitPlatformInterface();
 
-	// Create Fonts Texture
-	unsigned char* pixels;
-	int width, height;
-	//io.Fonts->AddFontFromFileTTF("./textures/ostrich-regular.ttf", 18.0f);
-	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
-
-	imBd.engine->createSampledImage(imBd.fontSImage, width, height, 4, (char*)pixels, 1, VK_SAMPLE_COUNT_1_BIT);
-	
-	VkEImgui_CreatePipeline(&imBd);
-	
-	// Create the Descriptor Set for font:
-	imBd.fontDescriptorSet = createSingleImageDecriptorSet(imBd.engine, imBd.descriptorPool, imBd.descriptorSetLayout, imBd.fontSImage);
-	io.Fonts->SetTexID((ImTextureID)imBd.fontDescriptorSet);
+	VkEImgui_CreatePipeline(&imBd);	
 }
 
 
-void VkEImgui_addDefaultFont(VkEImgui_Backend& imBd) {
+void VkEImgui_addDefaultFont(VkEImgui_Backend* bd) {
+	if (bd->fontSImage.image != VK_NULL_HANDLE) bd->engine->cleanupSampledImage(bd->fontSImage);
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 
 	// Create Fonts Texture
@@ -945,19 +955,37 @@ void VkEImgui_addDefaultFont(VkEImgui_Backend& imBd) {
 	//io.Fonts->AddFontFromFileTTF("./textures/ostrich-regular.ttf", 18.0f);
 	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
-	imBd.engine->createSampledImage(imBd.fontSImage, width, height, 4, (char*)pixels, 1, VK_SAMPLE_COUNT_1_BIT);
+	bd->engine->createSampledImage(bd->fontSImage, width, height, 4, (char*)pixels, 1, VK_SAMPLE_COUNT_1_BIT);
 	// Create the Descriptor Set for font:
-	imBd.fontDescriptorSet = createSingleImageDecriptorSet(imBd.engine, imBd.descriptorPool, imBd.descriptorSetLayout, imBd.fontSImage);
-	io.Fonts->SetTexID((ImTextureID)imBd.fontDescriptorSet);
+	bd->fontDescriptorSet = createSingleImageDecriptorSet(bd->engine, bd->descriptorPool, bd->descriptorSetLayout, bd->fontSImage);
+	io.Fonts->SetTexID((ImTextureID)bd->fontDescriptorSet);
 }
 
+
+void VkEImgui_setCustomFontFromFileTTF(VkEImgui_Backend* bd, std::string fontFilePath,float fontSize) {
+	if (bd->fontSImage.image != VK_NULL_HANDLE) bd->engine->cleanupSampledImage(bd->fontSImage);
+
+	// Create Fonts Texture
+	unsigned char* pixels;
+	int width, height;
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+
+	io.Fonts->AddFontFromFileTTF(fontFilePath.c_str(), fontSize);
+	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+
+	bd->engine->createSampledImage(bd->fontSImage, width, height, 4, (char*)pixels, 1, VK_SAMPLE_COUNT_1_BIT);
+
+	// Create the Descriptor Set for font:
+	bd->fontDescriptorSet = createSingleImageDecriptorSet(bd->engine, bd->descriptorPool, bd->descriptorSetLayout, bd->fontSImage);
+	io.Fonts->SetTexID((ImTextureID)bd->fontDescriptorSet);
+}
 
 void ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count)
 {
 	VkEImgui_Backend* bd = VkEImgui_GetBackendData();
 
 	IM_ASSERT(min_image_count >= 2);
-	if (bd->minImageCount == min_image_count)
+	if (bd->mainViewport.sc.minImageCount == min_image_count)
 		return;
 
 	IM_ASSERT(0); // FIXME-VIEWPORT: Unsupported. Need to recreate all swap chains!
@@ -973,46 +1001,50 @@ void ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count)
 void VkEImgui_cleanupSwapChain(VkEImgui_Backend& imBd) {
 
 	VkDevice device = imBd.engine->getBackEndData().device;
-	for (size_t i = 0; i < imBd.frameBuffers.size(); i++) {
-		vkDestroyFramebuffer(device, imBd.frameBuffers[i], nullptr);
+	VkEImgui_Viewport* mvp = &imBd.mainViewport;
+	for (size_t i = 0; i < mvp->frameBuffers.size(); i++) {
+		vkDestroyFramebuffer(device, mvp->frameBuffers[i], nullptr);
 	}
-	vkFreeCommandBuffers(device, imBd.commandPool, static_cast<uint32_t>(imBd.commandBuffers.size()), imBd.commandBuffers.data());
-	vkDestroyRenderPass(device, imBd.renderPass, nullptr);
+	vkFreeCommandBuffers(device, mvp->commandPool, static_cast<uint32_t>(mvp->commandBuffers.size()), mvp->commandBuffers.data());
+	vkDestroyRenderPass(device, mvp->renderPass, nullptr);
 }
 
-void recreateImguiSwapChainObjects(VkEImgui_Backend& imBd, VkEImgui_DeviceObjectsInfo info) {
+void recreateImguiSwapChainObjects(VkEImgui_Backend& imBd, VkE_SwapChain sc, bool firstPass, uint32_t maxFramesInFlight) {
 	VulkanEngine* vk = imBd.engine;
-	VulkanBackEndData bd = vk->getBackEndData();
-	VkE_SwapChain* sc = vk->getSwapChainDetails();
+	VkEImgui_Viewport* mvp = &imBd.mainViewport;
 
-	ImGui_ImplVulkan_SetMinImageCount(sc->minImageCount);
-	vk->createRenderPass(imBd.renderPass, sc->format, VK_SAMPLE_COUNT_1_BIT, info.firstPass, true,false, info.firstPass);
-	imBd.commandBuffers = vk->createCommandBuffers(imBd.commandPool, sc->imageCount,true);
-	imBd.frameBuffers = vk->createFramebuffers(imBd.renderPass, *sc);
+	ImGui_ImplVulkan_SetMinImageCount(sc.minImageCount);
+	vk->createRenderPass(mvp->renderPass, sc.format, VK_SAMPLE_COUNT_1_BIT, firstPass, true,false, firstPass);
+	mvp->commandBuffers = vk->createCommandBuffers(mvp->commandPool, sc.imageCount,true);
+	mvp->frameBuffers = vk->createFramebuffers(mvp->renderPass, sc);
+
+	mvp->sc = sc;
+	imBd.mainViewportFirstPass = firstPass;
+	imBd.maxFramesInFlight = maxFramesInFlight;
 }
 
 
 void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imBd) {
-	VkDevice device = imBd.engine->getBackEndData().device;
+	VkDevice device = imBd.engine->device;
+	VkEImgui_Viewport* mvp = &imBd.mainViewport;
 
 	// First destroy objects in all viewports
 	std::vector<VkEImgui_vertexBuffers>& vertexBuffers = imBd.mainViewport.vertexBuffers;
 	// Resources to destroy when the program ends
 	for (int i = 0; i < vertexBuffers.size(); i++) {
-		if (vertexBuffers[i].vertex.buffer) { vkDestroyBuffer(device, vertexBuffers[i].vertex.buffer, nullptr); vertexBuffers[i].vertex.buffer = VK_NULL_HANDLE; }
-		if (vertexBuffers[i].vertex.memory) { vkFreeMemory(device, vertexBuffers[i].vertex.memory, nullptr); vertexBuffers[i].vertex.memory = VK_NULL_HANDLE; }
-		if (vertexBuffers[i].index.buffer)  { vkDestroyBuffer(device, vertexBuffers[i].index.buffer, nullptr); vertexBuffers[i].index.buffer = VK_NULL_HANDLE; }
-		if (vertexBuffers[i].index.memory)  { vkFreeMemory(device, vertexBuffers[i].index.memory, nullptr); vertexBuffers[i].index.memory = VK_NULL_HANDLE; }
-		vertexBuffers[i].vertex.size = 0;
-		vertexBuffers[i].index.size = 0;
+		if (vertexBuffers[i].vertex.buffer) imBd.engine->destroyBufferBundle(vertexBuffers[i].vertex);
+		if (vertexBuffers[i].index.buffer)  imBd.engine->destroyBufferBundle(vertexBuffers[i].index);
 	}
 	if (imBd.ShaderModuleVert) { vkDestroyShaderModule(device, imBd.ShaderModuleVert, nullptr); imBd.ShaderModuleVert = VK_NULL_HANDLE; }
 	if (imBd.ShaderModuleFrag) { vkDestroyShaderModule(device, imBd.ShaderModuleFrag, nullptr); imBd.ShaderModuleFrag = VK_NULL_HANDLE; }
 	if (imBd.descriptorPool) { vkDestroyDescriptorPool(device, imBd.descriptorPool, nullptr); imBd.descriptorPool = VK_NULL_HANDLE; }
-	if (imBd.commandPool) { vkDestroyCommandPool(device, imBd.commandPool, nullptr); imBd.commandPool = VK_NULL_HANDLE; }
+	if (imBd.fontSampler) { vkDestroySampler(device, imBd.fontSampler, nullptr); imBd.fontSampler = VK_NULL_HANDLE; }
+
 	if (imBd.descriptorSetLayout) { vkDestroyDescriptorSetLayout(device, imBd.descriptorSetLayout, nullptr); imBd.descriptorSetLayout = VK_NULL_HANDLE; }
 	if (imBd.pipelineLayout) { vkDestroyPipelineLayout(device, imBd.pipelineLayout, nullptr); imBd.pipelineLayout = VK_NULL_HANDLE; }
 	if (imBd.pipeline) { vkDestroyPipeline(device, imBd.pipeline, nullptr); imBd.pipeline = VK_NULL_HANDLE; }
+
+	if (mvp->commandPool) { vkDestroyCommandPool(device, mvp->commandPool, nullptr); mvp->commandPool = VK_NULL_HANDLE; }
 	imBd.engine->cleanupSampledImage(imBd.fontSImage);
 }
 

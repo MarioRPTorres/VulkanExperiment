@@ -160,6 +160,7 @@ public:
 	VkQueue presentQueue = VK_NULL_HANDLE;
 	VkQueue transferQueue = VK_NULL_HANDLE;
 	VkSampleCountFlagBits maxMSAASamples = VK_SAMPLE_COUNT_1_BIT;
+	bool framebufferResized = false;
 
 protected:
 	VkInstance instance;
@@ -168,40 +169,13 @@ protected:
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	uint32_t mainPresentFamily; // Main Window Present Family queue family
 
-	VkE_SwapChain mainSwapChain;
 
-	VkRenderPass renderPass;
-	std::vector<VkFramebuffer> swapChainFramebuffers;
-	VkCommandPool commandPool;
-
-	VkE_FrameSyncObjects syncObjects;
-	std::vector<VkSemaphore>& imageAvailableSemaphore = syncObjects.imageAvailableSemaphore;
-	std::vector<VkSemaphore>& renderFinishedSemaphore = syncObjects.renderFinishedSemaphore;
-	std::vector<VkFence>& inFlightFences = syncObjects.inFlightFences;
-	std::vector<VkFence>& imagesInFlight = syncObjects.imagesInFlight;
-
-	VkImage depthImage;
-	VkDeviceMemory depthImageMemory;
-	VkImageView depthImageView;
-	// Multisampling needs an offscreen buffer that is then rendered to the scrren
-	VkImage colorImage;
-	VkDeviceMemory colorImageMemory;
-	VkImageView colorImageView;
-
-	
 	int rateDeviceSuitability(VkPhysicalDevice device);
 	bool isDeviceSuitable(VkPhysicalDevice device,VkSurfaceKHR surface);
-
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-	
-	// Various Resources
-	void createColorResources();
-	void createDepthResources();
-
-	
 
 	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 	void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
@@ -299,27 +273,30 @@ public:
 			device,
 			graphicsFamily,
 			graphicsQueue,
-			transferQueue,
-			commandPool
+			transferQueue
 		};
 
 		return bd;
 	}
 
-	inline VkE_SwapChain* getSwapChainDetails() { return &mainSwapChain; }
+	inline VkE_SwapChain* getSwapChainDetails() { return nullptr; }
 
 };
-
 // ***************************** Vulkan Window Class ****************************
 // ******************************************************************************
+
+/*! @brief	Default class for rendering to a window with the basic objects
+*  @param[in] vk Pointer to a VulkanEngine to use as backend. 
+*  @return A VulkanWindow instance
+*/
 class VulkanWindow {
 protected:
 	VulkanEngine* vk;
 	GLFWwindow* window = nullptr;
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 	VkE_SwapChain sc;
-	std::vector<VkFramebuffer> frameBuffers;
-	std::vector<VkCommandBuffer> commandBuffers;
+	std::vector<VkFramebuffer> frameBuffers = {};
+	std::vector<VkCommandBuffer> commandBuffers = {};
 	VkE_FrameSyncObjects syncObjects;
 	VkQueue graphicsQueue = VK_NULL_HANDLE;
 	VkQueue presentQueue = VK_NULL_HANDLE;
@@ -343,10 +320,25 @@ protected:
 	float width = 0;
 	float height = 0;
 protected:
-	// Various Resources
+	/*! @brief Starts the glfw library and create a window object
+	*  @param[in] width - Initial width of the window. Must be greater than zero
+	*  @param[in] height - Initial height of the window. Must be greater than zero
+	*  @param[in] resizable - Allows window to be resizable
+	*  @param[in] userPoint - Custom pointer to be attached to this window
+	*  @param[in] resizeCallback - Callback function for when window changes size
+	*  @param[in] keyCallback - Callback function for when a key gets pressed
+	*
+	*/
+	void initWindow(int width, int height, bool resizable, void* userPointer, GLFWframebuffersizefun resizeCallback, GLFWkeyfun keyCallback);
 	void createColorResources();
 	void createDepthResources();
 
+	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+		// Our HelloTriangleApplication object
+		auto app = reinterpret_cast<VulkanWindow*>(glfwGetWindowUserPointer(window));
+		// This flag is used for explicit resize because it is not garanteed that the driver will send a out-of-date error when the window is resized.
+		app->framebufferResized = true;
+	}
 public:
 	VulkanWindow(VulkanEngine* vk) : vk(vk){};
 };

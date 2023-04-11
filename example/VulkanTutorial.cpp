@@ -146,121 +146,84 @@ static std::vector<char>readFile(const std::string& filename) {
 	return buffer;
 }
 
-class HelloTriangleApplication:protected VulkanEngine {
+class HelloTriangleApplication:protected VulkanWindow {
+	using VulkanWindow::VulkanWindow;
 public:
 	void run() {
 		mipLevels = 3;
-		initWindow();
+		initWindow(WIDTH,HEIGHT,true,this, framebufferResizeCallback, key_callback);
 		initVulkan();
-		if (enableImgui) VkEImgui_init((VulkanEngine*)this, imGuiBackEnd);
+		if (enableImgui) {
+			VkEImgui_init(imGuiBackEnd);
+			VkEImgui_addDefaultFont(&imGuiBackEnd);
+		}
 		mainLoop();
 		cleanup();
 	}
 private:
-	VkSurfaceKHR mainSurface;
 	VkShaderModule vert;
 	VkShaderModule frag;
 	VkE_Buffer vertexBuffer;
 	VkE_Buffer indexBuffer;
-	uint32_t indexCount = 0;
 	std::vector<VkE_Buffer> uniformBuffers;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	uint32_t mipLevels;
 
+	bool firstSwapChain = true;
+
 	VkDescriptorPool descriptorPool;
 	VkDescriptorSetLayout descriptorSetLayout;
-	VkPipelineLayout pipelineLayout;
-	VkPipeline graphicsPipeline;
-	VkEImgui_Backend imGuiBackEnd;
-	VkEImgui_DeviceObjectsInfo imguiInfo = { false };
-	std::vector<VkCommandBuffer> commandBuffers;
-
-	size_t inFlightFrameIndex = 0;
-	uint32_t imageIndex;
-	bool framebufferResized = false;
-	bool swapChainOutdated = false;
 	std::array<std::vector<VkDescriptorSet>, MIRROR_DESCRIPTOR_SET_COUNT> descriptorSets;
 	int descriptorGroup = 0;
 
-	void initWindow() {
-		// Initiates the GLFW library
-		glfwInit();
-
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // Tells GLFW to not create an OpenGL context
-		//glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);	// Disable resizable window
-
-		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-		// Sets a pointer to the application inside window handle
-		glfwSetWindowUserPointer(window, this);
-		// Sets a callback for size change
-		glfwSetFramebufferSizeCallback(window,framebufferResizeCallback);
-
-		// Set key input callback
-		glfwSetKeyCallback(window, key_callback);
-	}
-
-	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-		// Our HelloTriangleApplication object
-		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
-		// This flag is used for explicit resize because it is not garanteed that the driver will send a out-of-date error when the window is resized.
-		app->framebufferResized = true;
-	}
+	VkEImgui_Backend imGuiBackEnd;
+	bool imguiInfo =  false;
 
 	void initVulkan() {
-		createInstance();
-		setupDebugMessenger();
-		createSurface(window,mainSurface);
-		pickPhysicalDevice(mainSurface);
-		createLogicalDevice();
-		createSwapChain(mainSurface,mainSwapChain);
-		createSwapChainImageViews(mainSwapChain);
-		if (enableImgui) {
-			VkEImgui_setupBackEnd(imGuiBackEnd, (VulkanEngine*)this, mainSwapChain.minImageCount, mainSwapChain.imageCount,MAX_FRAME_IN_FLIGHT);
-			VkEImgui_createBackEndObjects((VulkanEngine*) this, imGuiBackEnd,imguiInfo);
-		} 
-		createRenderPass(renderPass, mainSwapChain.format, maxMSAASamples, true, !enableImgui, true,true);
+		vk->createInstance();
+		vk->setupDebugMessenger();
+		vk->createSurface(window,surface);
+		vk->pickPhysicalDevice(surface);
+		msaaSamples = vk->maxMSAASamples;
+		vk->createLogicalDevice();
+		graphicsQueue = vk->graphicsQueue;
+		presentQueue = vk->presentQueue;
+		// Reuseable descriptorSetLayout
 		createDescriptorSetLayout();
+		// Reuseable ShaderModules
 		shaderCode32 vertShaderCode;
 		shaderCode32 fragShaderCode;
 		char2shaderCode(readFile("./vert.spv"), vertShaderCode);
 		char2shaderCode(readFile("./frag.spv"), fragShaderCode);
+		vert = vk->createShaderModule(vertShaderCode);
+		frag = vk->createShaderModule(fragShaderCode);
 
-		vert = createShaderModule(vertShaderCode);
-		frag = createShaderModule(fragShaderCode);
-		createGraphicsPipeline(graphicsPipeline,pipelineLayout,renderPass, vert, frag, PCTVertex::getDescriptions(),nullptr, descriptorSetLayout,mainSwapChain.extent,maxMSAASamples);
-		createCommandPool(commandPool,graphicsFamily,0);
+		vk->createCommandPool(commandPool,vk->graphicsFamily,0);
 		// If transfer family and graphics family are the same use the same command pool
-		if (graphicsFamily == transferFamily)
-			transientcommandPool = commandPool;
+		if (vk->graphicsFamily == vk->transferFamily)
+			vk->transientcommandPool = commandPool;
 		else {
 			// Transfer Challenge & Transient Command Pool Challenge:
 			// Create a transient pool for short lived command buffers for memory allocation optimizations.
-			createCommandPool(transientcommandPool, transferFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+			vk->createCommandPool(vk->transientcommandPool, vk->transferFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
 		}
-		createColorResources();
-		createDepthResources();
-		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain,colorImageView, depthImageView);
-		createVertexBuffer(vertices.data(),vertices.size()*sizeof(vertices[0]), vertexBuffer);
-		createIndexBuffer(indices.data(),indices.size()*sizeof(indices[0]),indexBuffer);
-		indexCount = static_cast<uint32_t>(indices.size());
-		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(),true);
-		createUniformBuffers();
+
+		// Create Buffer Resources
+		vk->createVertexBuffer(vertices.data(),vertices.size()*sizeof(vertices[0]), vertexBuffer);
+		vk->createIndexBuffer(indices.data(),indices.size()*sizeof(indices[0]),indexBuffer);
 		createTexture(textureImages[0], textures[0]);
 		createTexture(updatedTextureImages[0], updatedTextures[0]);
 		createTexture(textureImages[1], textures[1]);
 		createTexture(updatedTextureImages[1], updatedTextures[1]);
 
-		createDescriptorPool(descriptorPool, 
-			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT, 
-			mainSwapChain.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
-			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
-		createDescriptorSets();
-		updateDescriptorSet(textureImages, 0);
-		updateDescriptorSet(updatedTextureImages, 1);
-		// Write the command buffers after the descriptor sets are updated
-		writeCommandBuffers();
-		createSyncObjects(syncObjects,mainSwapChain.imageCount);
+		createSwapChainObjects();
+
+		if (enableImgui) {
+			VkEImgui_setupBackEnd(imGuiBackEnd, vk,window, sc,imguiInfo, MAX_FRAME_IN_FLIGHT);
+			VkEImgui_createBackEndObjects(imGuiBackEnd);
+		}
+		firstSwapChain = false;
 	}
 
 	void mainLoop() {
@@ -319,86 +282,106 @@ private:
 				lastTime = std::chrono::high_resolution_clock::now();
 				descriptorGroup = (descriptorGroup + 1) % MIRROR_DESCRIPTOR_SET_COUNT;
 				// First wait for device to be idle so that all resources are free from use
-				vkDeviceWaitIdle(device);
+				vkDeviceWaitIdle(vk->device);
 				writeCommandBuffers();
 			}
 		}
 
-		vkDeviceWaitIdle(device);
+		vkDeviceWaitIdle(vk->device);
 	}
 
 	void cleanup() {
 		cleanupSwapChain();
 
-		vkDestroyShaderModule(device, vert, nullptr);
-		vkDestroyShaderModule(device, frag, nullptr);
+		vkDestroyShaderModule(vk->device, vert, nullptr);
+		vkDestroyShaderModule(vk->device, frag, nullptr);
 
-		cleanupSampledImage(textureImages[0]);
-		cleanupSampledImage(textureImages[1]);
-		cleanupSampledImage(updatedTextureImages[0]);
-		cleanupSampledImage(updatedTextureImages[1]);
+		vk->cleanupSampledImage(textureImages[0]);
+		vk->cleanupSampledImage(textureImages[1]);
+		vk->cleanupSampledImage(updatedTextureImages[0]);
+		vk->cleanupSampledImage(updatedTextureImages[1]);
 		// Here there is a choice for the Allocator function
-		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(vk->device, descriptorSetLayout, nullptr);
 		// Here there is a choice for the Allocator function
-		destroyBufferBundle(vertexBuffer);
-		destroyBufferBundle(indexBuffer);
-
-		cleanupSyncObjects(syncObjects);
+		vk->destroyBufferBundle(vertexBuffer);
+		vk->destroyBufferBundle(indexBuffer);
 
 		// Here there is a choice for the Allocator function
-		vkDestroyCommandPool(device, commandPool, nullptr);
-		if (transientcommandPool != commandPool) vkDestroyCommandPool(device, transientcommandPool, nullptr);
-		
+		vkDestroyCommandPool(vk->device, commandPool, nullptr);
+		if (vk->transientcommandPool != commandPool) vkDestroyCommandPool(vk->device, vk->transientcommandPool, nullptr);
 		if (enableImgui) {
 			// Resources to destroy when the program ends
 			VkEImgui_cleanupBackEndObjects(imGuiBackEnd);
 			VkEImgui_Shutdown();
 		}
 
-		vkDestroyDevice(device, nullptr);
-		if (enableValidationLayers) {
-			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-		}
-		vkDestroySurfaceKHR(instance, mainSurface, nullptr);
-		vkDestroyInstance(instance, nullptr);
-
+		if (surface != VK_NULL_HANDLE) { vk->destroySurface(surface); surface = VK_NULL_HANDLE; }
+		vk->shutdownVulkanEngine();
 		glfwDestroyWindow(window);	// Cleanup Window Resources
-
 		glfwTerminate();	// Terminate GLFW Library
 	}
 
 	void cleanupSwapChain() {
-		vkDestroyImageView(device, colorImageView, nullptr);
-		vkDestroyImage(device, colorImage, nullptr);
-		vkFreeMemory(device, colorImageMemory, nullptr);
-		vkDestroyImageView(device, depthImageView, nullptr);
-		vkDestroyImage(device, depthImage, nullptr);
-		vkFreeMemory(device, depthImageMemory, nullptr);
+		vk->cleanupSyncObjects(syncObjects);
+		vk->cleanupSampledImage(msaaColorImage);
+		vk->cleanupSampledImage(depthImage);
 
-		for (size_t i = 0; i < swapChainFramebuffers.size(); i++) {
-			vkDestroyFramebuffer(device, swapChainFramebuffers[i], nullptr);
+		for (size_t i = 0; i < frameBuffers.size(); i++) {
+			vkDestroyFramebuffer(vk->device, frameBuffers[i], nullptr);
 		}
-		vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+		vkFreeCommandBuffers(vk->device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 
-		vkDestroyPipeline(device, graphicsPipeline, nullptr);
-		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-		vkDestroyRenderPass(device, renderPass, nullptr);
+		vkDestroyPipeline(vk->device, pipeline, nullptr);
+		vkDestroyPipelineLayout(vk->device, pipelineLayout, nullptr);
+		vkDestroyRenderPass(vk->device, renderPass, nullptr);
 
 		if (enableImgui) {
 			VkEImgui_cleanupSwapChain(imGuiBackEnd);
 		}
 
-		for (size_t i = 0; i < mainSwapChain.imageViews.size(); i++) {
-			vkDestroyImageView(device, mainSwapChain.imageViews[i], nullptr);
+		for (size_t i = 0; i < sc.imageViews.size(); i++) {
+			vkDestroyImageView(vk->device, sc.imageViews[i], nullptr);
 		}
-		vkDestroySwapchainKHR(device, mainSwapChain.swapChain, nullptr);
+		vkDestroySwapchainKHR(vk->device, sc.swapChain, nullptr);
 
 		for (size_t i = 0; i < uniformBuffers.size(); i++) {
-			destroyBufferBundle(uniformBuffers[i]);
+			vk->destroyBufferBundle(uniformBuffers[i]);
 		}
 
-		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+		vkDestroyDescriptorPool(vk->device, descriptorPool, nullptr);
 	}
+
+	void createSwapChainObjects() {
+		// Recreate the swapchain
+		vk->createSwapChain(surface, sc);
+		vk->createSwapChainImageViews(sc);
+		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
+		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, !enableImgui, true, true);
+		vk->createDescriptorPool(descriptorPool,
+			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT,
+			sc.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
+			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
+		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, 
+			vert, frag, 
+			PCTVertex::getDescriptions(), nullptr, descriptorSetLayout, 
+			sc.extent, 
+			msaaSamples);
+		createColorResources();
+		createDepthResources();
+		frameBuffers = vk->createFramebuffers(renderPass, sc, msaaColorImage.view, depthImage.view);
+		createUniformBuffers();
+		createDescriptorSets();
+		updateDescriptorSet(textureImages, 0);
+		updateDescriptorSet(updatedTextureImages, 1);
+		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(), true);
+		// Write the command buffers after the descriptor sets are updated
+		writeCommandBuffers();
+		if (enableImgui && !firstSwapChain) {
+			recreateImguiSwapChainObjects(imGuiBackEnd, sc, imguiInfo, MAX_FRAME_IN_FLIGHT);
+		}
+		vk->createSyncObjects(syncObjects, sc.imageCount);
+	}
+
 
 	void recreateSwapChain() {
 		swapChainOutdated = false;
@@ -412,43 +395,19 @@ private:
 			glfwWaitEvents();
 		}
 
-		
 		// First wait for device to be idle so that all resources are free from use
-		vkDeviceWaitIdle(device);
-
+		vkDeviceWaitIdle(vk->device);
 		cleanupSwapChain();
-
-		// Recreate the swapchain
-		createSwapChain(mainSurface,mainSwapChain);
-		createSwapChainImageViews(mainSwapChain);
-		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		createRenderPass(renderPass, mainSwapChain.format, maxMSAASamples, true, !enableImgui, true, true);
-		createDescriptorPool(descriptorPool, 
-			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT, 
-			mainSwapChain.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
-			mainSwapChain.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
-		createGraphicsPipeline(graphicsPipeline, pipelineLayout,renderPass, vert,frag, PCTVertex::getDescriptions(),nullptr, descriptorSetLayout, mainSwapChain.extent, maxMSAASamples);
-		createColorResources();
-		createDepthResources();
-		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain, colorImageView, depthImageView);
-		createUniformBuffers();
-		createDescriptorSets();
-		updateDescriptorSet(textureImages, 0);
-		updateDescriptorSet(updatedTextureImages, 1);
-		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(), true);
-		writeCommandBuffers();
-		if (enableImgui) {
-			recreateImguiSwapChainObjects(imGuiBackEnd, imguiInfo);
-		}
+		createSwapChainObjects();
 	}
 
 	void createUniformBuffers() {
 		VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
-		uniformBuffers.resize(mainSwapChain.imageCount);
+		uniformBuffers.resize(sc.imageCount);
 
-		for (size_t i = 0; i < mainSwapChain.imageCount; i++) {
-			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+		for (size_t i = 0; i < sc.imageCount; i++) {
+			vk->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i].buffer,
 				uniformBuffers[i].memory);
 		}
@@ -469,13 +428,13 @@ private:
 		//ubo.model[3][1] = 1.0f;
 		//ubo.model[3][2] = 0.0f;
 		ubo.view = glm::lookAt(glm::vec3(cameraEye[0], cameraEye[1], cameraEye[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-		ubo.proj = glm::perspective(glm::radians(60.0f), mainSwapChain.extent.width / (float)mainSwapChain.extent.height, 0.1f, 60.0f);
+		ubo.proj = glm::perspective(glm::radians(60.0f), sc.extent.width / (float)sc.extent.height, 0.1f, 60.0f);
 		ubo.proj[1][1] *= -1;
 
 		void* data;
-		vkMapMemory(device, uniformBuffers[currentImage].memory, 0, sizeof(ubo), 0, &data);
+		vkMapMemory(vk->device, uniformBuffers[currentImage].memory, 0, sizeof(ubo), 0, &data);
 		memcpy(data, &ubo, sizeof(ubo));
-		vkUnmapMemory(device, uniformBuffers[currentImage].memory);
+		vkUnmapMemory(vk->device, uniformBuffers[currentImage].memory);
 
 	}
 
@@ -506,13 +465,13 @@ private:
 		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
 		layoutInfo.pBindings = bindings.data();
 
-		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+		if (vkCreateDescriptorSetLayout(vk->device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor set layout!");
 		}
 	}
 
 	void createDescriptorSets() {
-		std::vector<VkDescriptorSetLayout> layouts(mainSwapChain.imageCount, descriptorSetLayout);
+		std::vector<VkDescriptorSetLayout> layouts(sc.imageCount, descriptorSetLayout);
 		VkDescriptorSetAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.descriptorPool = descriptorPool;
@@ -522,7 +481,7 @@ private:
 		for (int i = 0; i < MIRROR_DESCRIPTOR_SET_COUNT; i++) {
 			descriptorSets[i].resize(layouts.size());
 
-			if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets[i].data()) != VK_SUCCESS) {
+			if (vkAllocateDescriptorSets(vk->device, &allocInfo, descriptorSets[i].data()) != VK_SUCCESS) {
 				throw std::runtime_error("failed to allocate descriptor sets!");
 			}
 		}
@@ -532,7 +491,7 @@ private:
 
 
 		std::vector<VkDescriptorSet>& descriptorSet = descriptorSets[groupIndex];
-		for (size_t i = 0; i < mainSwapChain.imageCount; i++) {
+		for (size_t i = 0; i < sc.imageCount; i++) {
 			VkDescriptorBufferInfo bufferInfo = {};
 			bufferInfo.buffer = uniformBuffers[i].buffer;
 			bufferInfo.offset = 0;
@@ -565,7 +524,7 @@ private:
 			descriptorWrites[1].descriptorCount = static_cast<uint32_t>(imagesInfo.size());
 			descriptorWrites[1].pImageInfo = imagesInfo.data();
 
-			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+			vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 		}
 	}
 
@@ -576,7 +535,7 @@ private:
 		// obviously doesn’t matter.Just like vkAcquireNextImageKHR this function also
 		// takes a timeout.Unlike the semaphores, we manually need to restore the fence
 		// to the unsignaled state by resetting it with the vkResetFences call.
-		vkWaitForFences(device, 1, &inFlightFences[inFlightFrameIndex], VK_TRUE, UINT64_MAX);
+		vkWaitForFences(vk->device, 1, &syncObjects.inFlightFences[inFlightFrameIndex], VK_TRUE, UINT64_MAX);
 
 		// The drawFrame function perform three operations:
 		//	• Acquire an image from the swap chain
@@ -601,7 +560,7 @@ private:
 		// after a window resize.
 		//• VK_SUBOPTIMAL_KHR : The swap chain can still be used to successfully present to the surface, but the surface properties are no longer matched
 		// exactly.
-		VkResult result = vkAcquireNextImageKHR(device, mainSwapChain.swapChain, UINT64_MAX, imageAvailableSemaphore[inFlightFrameIndex], VK_NULL_HANDLE, &imageIndex);
+		VkResult result = vkAcquireNextImageKHR(vk->device, sc.swapChain, UINT64_MAX, syncObjects.imageAvailableSemaphore[inFlightFrameIndex], VK_NULL_HANDLE, &imageIndex);
 
 		// Using the result we can check if the swapchain is out of data and if so we need to recreate it
 		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -614,44 +573,44 @@ private:
 
 
 		// Check if a previous frame is using this image (i.e. there is its fence to wait on)
-		if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
-			vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+		if (syncObjects.imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+			vkWaitForFences(vk->device, 1, &syncObjects.imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
 		}
 		// Mark the image as now being in use by this frame
-		imagesInFlight[imageIndex] = inFlightFences[inFlightFrameIndex];
+		syncObjects.imagesInFlight[imageIndex] = syncObjects.inFlightFences[inFlightFrameIndex];
 
 		updateUniformBuffer(imageIndex);
 
 		std::vector<VkCommandBuffer> submitCommmandBuffers = { commandBuffers[imageIndex] };
 		VkResult err;
 		if (enableImgui) {
-			err = vkResetCommandBuffer(imGuiBackEnd.commandBuffers[imageIndex], 0);
+			err = vkResetCommandBuffer(imGuiBackEnd.mainViewport.commandBuffers[imageIndex], 0);
 			check_vk_result(err);
 			VkCommandBufferBeginInfo info = {};
 			info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 			info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-			err = vkBeginCommandBuffer(imGuiBackEnd.commandBuffers[imageIndex], &info);
+			err = vkBeginCommandBuffer(imGuiBackEnd.mainViewport.commandBuffers[imageIndex], &info);
 			check_vk_result(err);
 
 			VkClearValue clearValue = { 0.0f,0.0f ,0.0f ,0.0f };
 			VkRenderPassBeginInfo imguiRenderPassBeginInfo = {};
 			imguiRenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			imguiRenderPassBeginInfo.renderPass = imGuiBackEnd.renderPass;
-			imguiRenderPassBeginInfo.framebuffer = imGuiBackEnd.frameBuffers[imageIndex];
-			imguiRenderPassBeginInfo.renderArea.extent.width = mainSwapChain.extent.width;
-			imguiRenderPassBeginInfo.renderArea.extent.height = mainSwapChain.extent.height;
+			imguiRenderPassBeginInfo.renderPass = imGuiBackEnd.mainViewport.renderPass;
+			imguiRenderPassBeginInfo.framebuffer = imGuiBackEnd.mainViewport.frameBuffers[imageIndex];
+			imguiRenderPassBeginInfo.renderArea.extent.width = sc.extent.width;
+			imguiRenderPassBeginInfo.renderArea.extent.height = sc.extent.height;
 			imguiRenderPassBeginInfo.clearValueCount = 1;
 			imguiRenderPassBeginInfo.pClearValues = &clearValue;
-			vkCmdBeginRenderPass(imGuiBackEnd.commandBuffers[imageIndex], &imguiRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdBeginRenderPass(imGuiBackEnd.mainViewport.commandBuffers[imageIndex], &imguiRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 			// Record Imgui Draw Data and draw funcs into command buffer
-			VkEImgui_RenderDrawData(ImGui::GetDrawData(), imGuiBackEnd.commandBuffers[imageIndex]);
+			VkEImgui_RenderDrawData(ImGui::GetDrawData(), imGuiBackEnd.mainViewport.commandBuffers[imageIndex]);
 			// Submit command buffer
-			vkCmdEndRenderPass(imGuiBackEnd.commandBuffers[imageIndex]);
-			err = vkEndCommandBuffer(imGuiBackEnd.commandBuffers[imageIndex]);
+			vkCmdEndRenderPass(imGuiBackEnd.mainViewport.commandBuffers[imageIndex]);
+			err = vkEndCommandBuffer(imGuiBackEnd.mainViewport.commandBuffers[imageIndex]);
 			check_vk_result(err);
 
-			submitCommmandBuffers.push_back(imGuiBackEnd.commandBuffers[imageIndex]);
+			submitCommmandBuffers.push_back(imGuiBackEnd.mainViewport.commandBuffers[imageIndex]);
 		}
 
 		VkSubmitInfo submitInfo = {};
@@ -661,7 +620,7 @@ private:
 		//the graphics pipeline that writes to the color attachment. That means that theoretically the 
 		//implementation can already start executing our vertex shader and such while the image is not yet available.
 		//Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores.
-		VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[inFlightFrameIndex] };
+		VkSemaphore waitSemaphores[] = { syncObjects.imageAvailableSemaphore[inFlightFrameIndex] };
 
 		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
@@ -673,15 +632,15 @@ private:
 		submitInfo.commandBufferCount = static_cast<uint32_t>(submitCommmandBuffers.size());
 		submitInfo.pCommandBuffers = submitCommmandBuffers.data();
 
-		VkSemaphore signalSemaphores[] = { renderFinishedSemaphore[inFlightFrameIndex] };
+		VkSemaphore signalSemaphores[] = { syncObjects.renderFinishedSemaphore[inFlightFrameIndex] };
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = signalSemaphores;
 
-		vkResetFences(device, 1, &inFlightFences[inFlightFrameIndex]);
+		vkResetFences(vk->device, 1, &syncObjects.inFlightFences[inFlightFrameIndex]);
 
 		// Here we submit the command to draw the triangle.
 		// We also use the current Frame Fence to signal when the command buffer finishes executing, this way we know when a frame is finished
-		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[inFlightFrameIndex]) != VK_SUCCESS) {
+		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, syncObjects.inFlightFences[inFlightFrameIndex]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to submit draw comand buffer!");
 		}
 
@@ -693,9 +652,9 @@ private:
 		//The first two parameters specify which semaphores to wait on before presentation
 		//can happen, just like VkSubmitInfo.
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = &renderFinishedSemaphore[inFlightFrameIndex];
+		presentInfo.pWaitSemaphores = &syncObjects.renderFinishedSemaphore[inFlightFrameIndex];
 
-		VkSwapchainKHR swapChains[] = { mainSwapChain.swapChain };
+		VkSwapchainKHR swapChains[] = { sc.swapChain };
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = swapChains;
 		presentInfo.pImageIndices = &imageIndex;
@@ -733,14 +692,14 @@ private:
 	void createTexture(VkE_Image& image, std::string imageFile){
 		cv::Mat matImage = loadImage(imageFile);
 
-		createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(),(char*) matImage.data, mipLevels, VK_SAMPLE_COUNT_1_BIT);
+		vk->createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(),(char*) matImage.data, mipLevels, VK_SAMPLE_COUNT_1_BIT);
 
 		matImage.release();
 	}
 
 	void writeCommandBuffers() {
 
-		vkResetCommandPool(device, commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
+		vkResetCommandPool(vk->device, commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 		for (size_t i = 0; i < commandBuffers.size(); i++) {
 
 			VkCommandBufferBeginInfo beginInfo = {};
@@ -764,9 +723,9 @@ private:
 			VkRenderPassBeginInfo renderPassInfo = {};
 			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			renderPassInfo.renderPass = renderPass;
-			renderPassInfo.framebuffer = swapChainFramebuffers[i];
+			renderPassInfo.framebuffer = frameBuffers[i];
 			renderPassInfo.renderArea.offset = { 0,0 };
-			renderPassInfo.renderArea.extent = mainSwapChain.extent;
+			renderPassInfo.renderArea.extent = sc.extent;
 
 			std::array<VkClearValue, 2> clearValues = {};
 			clearValues[0].color = { 0.0f,0.0f,0.0f,1.0f };
@@ -784,7 +743,7 @@ private:
 			//	from secondary command buffers.
 			vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-			vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+			vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
 			//• vertexCount : Even though we don’t have a vertex buffer, we technically
 			//	still have 3 vertices to draw.
@@ -809,7 +768,7 @@ private:
 			// Draw Vertex
 			//vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 			// Indexed Vertex Draw
-			vkCmdDrawIndexed(commandBuffers[i], indexCount, 1, 0, 0, 0);
+			vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices.size()) , 1, 0, 0, 0);
 
 
 			vkCmdEndRenderPass(commandBuffers[i]);
@@ -828,7 +787,8 @@ int main() {
 	generateVertices(vertices,indices);
 	// loadModel();
 	compileShaders();
-	HelloTriangleApplication app;
+	VulkanEngine vk;
+	HelloTriangleApplication app(&vk);
 
 	try {
 		app.run();

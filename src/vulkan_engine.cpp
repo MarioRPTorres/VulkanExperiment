@@ -1254,20 +1254,6 @@ void VulkanEngine::createDescriptorPool(VkDescriptorPool& descriptorPool, uint32
 	}
 }
 
-void VulkanEngine::createColorResources() {
-	VkFormat colorFormat = mainSwapChain.format;
-
-	createImage(mainSwapChain.extent.width, mainSwapChain.extent.height,
-		1, maxMSAASamples,
-		colorFormat,
-		VK_IMAGE_TILING_OPTIMAL,
-		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		colorImage, colorImageMemory);
-
-	colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-}
-
 VkFormat VulkanEngine::findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
 	// The support of a format depends on the tiling mode and usage
 
@@ -1302,25 +1288,6 @@ VkFormat VulkanEngine::findDepthFormat() {
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
 	);
-}
-
-void VulkanEngine::createDepthResources() {
-
-
-	VkFormat depthFormat = findDepthFormat();
-
-	createImage(mainSwapChain.extent.width, mainSwapChain.extent.height,
-		1, maxMSAASamples,
-		depthFormat, VK_IMAGE_TILING_OPTIMAL,
-		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage,
-		depthImageMemory);
-	depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-
-	transitionImageLayout(depthImage, depthFormat,
-		VK_IMAGE_LAYOUT_UNDEFINED,
-		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-		1);
 }
 
 void VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage, VkE_Buffer& buffer) {
@@ -1411,6 +1378,7 @@ void VulkanEngine::mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDe
 void VulkanEngine::destroyBufferBundle(VkE_Buffer buffer) {
 	vkDestroyBuffer(device, buffer.buffer, nullptr); buffer.buffer = VK_NULL_HANDLE;
 	vkFreeMemory(device, buffer.memory, nullptr); buffer.memory = VK_NULL_HANDLE;
+	buffer.size = 0;
 };
 
 void VulkanEngine::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
@@ -1886,6 +1854,24 @@ void VulkanEngine::shutdownVulkanEngine() {
 	vkDestroyInstance(instance, nullptr);
 };
 
+//********************** Vulkan Window Class ******************************//
+void VulkanWindow::initWindow(int width, int height, bool resizable, void* userPointer, GLFWframebuffersizefun resizeCallback, GLFWkeyfun keyCallback) {
+	// Initiates the GLFW library. glfwInit handles the case when the library is initiated more than wonce
+	glfwInit();
+
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // Tells GLFW to not create an OpenGL context
+	if (!resizable) {
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);	// Disable resizable window
+	}
+	window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
+	// Sets a pointer to the application inside window handle
+	glfwSetWindowUserPointer(window, userPointer);
+	// Sets a callback for size change
+	glfwSetFramebufferSizeCallback(window, resizeCallback);
+
+	// Set key input callback
+	glfwSetKeyCallback(window, keyCallback);
+}
 
 void VulkanWindow::createColorResources() {
 	VkFormat colorFormat = sc.format;
