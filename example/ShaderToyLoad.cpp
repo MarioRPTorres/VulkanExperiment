@@ -46,64 +46,33 @@ void compileShaders() {
 	system(fragCommand.c_str());
 }
 
-class ShaderToyApplication :protected VulkanEngine {
+class ShaderToyApplication :protected VulkanWindow {
+	using VulkanWindow::VulkanWindow;
 public:
 	void run() {
-		initWindow();
+		initWindow(width, height, true, this, framebufferResizeCallback, nullptr);
 		initVulkan();
 		mainLoop();
 		cleanup();
 	}
 private:
-	int width = 0;
-	int height = 0;
-	VkShaderModule vert;
-	VkShaderModule frag;
-	VkPipeline graphicsPipeline;
-	VkPipelineLayout pipelineLayout;
-	std::vector<VkCommandBuffer> commandBuffers;
-	VkSurfaceKHR mainSurface;
-
-
-	size_t inFlightFrameIndex = 0;
-	uint32_t imageIndex;
-	bool framebufferResized = false;
-	bool swapChainOutdated = false;
-
-	void initWindow() {
-		// Initiates the GLFW library
-		glfwInit();
-
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // Tells GLFW to not create an OpenGL context
-		//glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);	// Disable resizable window
-
-		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-		// Sets a pointer to the application inside window handle
-		glfwSetWindowUserPointer(window, this);
-		// Sets a callback for size change
-		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-
-		glfwGetFramebufferSize(window, &width, &height);
-	}
-
-	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-		// Our HelloTriangleApplication object
-		auto app = reinterpret_cast<ShaderToyApplication*>(glfwGetWindowUserPointer(window));
-		// This flag is used for explicit resize because it is not garanteed that the driver will send a out-of-date error when the window is resized.
-		app->framebufferResized = true;
-	}
-
+	int width = WIDTH;
+	int height = HEIGHT;
+	VkShaderModule vert = VK_NULL_HANDLE;
+	VkShaderModule frag = VK_NULL_HANDLE;
+	VkCommandPool transientCommandPool = VK_NULL_HANDLE;
 
 	void initVulkan() {
-		createInstance();
-		setupDebugMessenger();
-		createSurface(window,mainSurface);
-		pickPhysicalDevice(mainSurface);
-		createLogicalDevice();
-		createSwapChain(mainSurface,mainSwapChain);
-		createSwapChainImageViews(mainSwapChain);
-		createRenderPass(renderPass,mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true,false,true);
+		vk->createInstance();
+		vk->setupDebugMessenger();
+		vk->createSurface(window,surface);
+		vk->pickPhysicalDevice(surface);
+		vk->createLogicalDevice();
 
+		auto vkbd = vk->getBackEndData();
+		graphicsQueue = vkbd.graphicsQueue;
+		presentQueue = vkbd.presentQueue;
+		
 		std::string vs = "./";
 		vs.append(vertexShader);
 		vs.append(".spv");
@@ -113,23 +82,32 @@ private:
 		shaderCode32 vertCode, fragCode;
 		char2shaderCode(readFile(vs), vertCode);
 		char2shaderCode(readFile(fs), fragCode);
-		vert = createShaderModule(vertCode);
-		frag = createShaderModule(fragCode);
-		std::vector<VkPushConstantRange> push(1, { VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(PushConstants) });
-		createGraphicsPipeline(graphicsPipeline, pipelineLayout, renderPass, vert, frag, constants::NullVertexDescriptions, &push, VK_NULL_HANDLE, mainSwapChain.extent, VK_SAMPLE_COUNT_1_BIT);
-
-		createCommandPool(commandPool, graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+		vert = vk->createShaderModule(vertCode);
+		frag = vk->createShaderModule(fragCode);
+		vk->createCommandPool(commandPool, vkbd.graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 		// If transfer family and graphics family are the same use the same command pool
-		if (graphicsFamily == transferFamily)
-			transientcommandPool = commandPool;
+		if (vkbd.graphicsQueueFamily == vkbd.transferQueueFamily)
+			transientCommandPool = commandPool;
 		else {
 			// Transfer Challenge & Transient Command Pool Challenge:
 			// Create a transient pool for short lived command buffers for memory allocation optimizations.
-			createCommandPool(transientcommandPool, transferFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+			vk->createCommandPool(transientCommandPool, vkbd.transferQueueFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
 		}
-		swapChainFramebuffers = createFramebuffers(renderPass,mainSwapChain);
-		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(),true);
-		createSyncObjects(syncObjects, mainSwapChain.imageCount);
+		vk->setTransientCommandPool(transientCommandPool);
+		createSwapChainObjects();
+	}
+
+	void createSwapChainObjects() {
+
+		VkExtent2D extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+		vk->createSwapChain(surface,sc,extent);
+		vk->createSwapChainImageViews(sc);
+		vk->createRenderPass(renderPass,sc.format, VK_SAMPLE_COUNT_1_BIT, true, true,false,true);
+		std::vector<VkPushConstantRange> push(1, { VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(PushConstants) });
+		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vert, frag, constants::NullVertexDescriptions, &push, VK_NULL_HANDLE, sc.extent, VK_SAMPLE_COUNT_1_BIT);
+		frameBuffers = vk->createFramebuffers(renderPass,sc);
+		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(),true);
+		vk->createSyncObjects(syncObjects, sc.imageCount);
 	}
 
 
@@ -147,53 +125,45 @@ private:
 				presentFrame();
 		}
 
-		vkDeviceWaitIdle(device);
+		vkDeviceWaitIdle(vk->device);
 	}
 
 	void cleanup() {
 		cleanupSwapChain();
 
-		if (vert != VK_NULL_HANDLE) { vkDestroyShaderModule(device, vert, nullptr); vert = VK_NULL_HANDLE; }
-		if (frag != VK_NULL_HANDLE) { vkDestroyShaderModule(device, frag, nullptr); frag = VK_NULL_HANDLE; }
+		if (vert != VK_NULL_HANDLE) { vkDestroyShaderModule(vk->device, vert, nullptr); vert = VK_NULL_HANDLE; }
+		if (frag != VK_NULL_HANDLE) { vkDestroyShaderModule(vk->device, frag, nullptr); frag = VK_NULL_HANDLE; }
 
-		for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-			// Here there is a choice for the Allocator function
-			vkDestroySemaphore(device, renderFinishedSemaphore[i], nullptr);
-			vkDestroySemaphore(device, imageAvailableSemaphore[i], nullptr);
-			vkDestroyFence(device, inFlightFences[i], nullptr);
-		}
 		// Here there is a choice for the Allocator function
-		vkDestroyCommandPool(device, commandPool, nullptr);
-		if (transientcommandPool != commandPool) vkDestroyCommandPool(device, transientcommandPool, nullptr);
-
-
-		vkDestroyDevice(device, nullptr);
-
-		if (enableValidationLayers) {
-			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+		vkDestroyCommandPool(vk->device, commandPool, nullptr);
+		if (transientCommandPool != commandPool) {
+			vkDestroyCommandPool(vk->device, transientCommandPool, nullptr);
+			transientCommandPool = VK_NULL_HANDLE;
 		}
-		vkDestroySurfaceKHR(instance, mainSurface, nullptr);
-		vkDestroyInstance(instance, nullptr);
+		commandPool = VK_NULL_HANDLE;
 
+		vk->destroySurface(surface);
+		vk->shutdownVulkanEngine();
 		glfwDestroyWindow(window);	// Cleanup Window Resources
 
 		glfwTerminate();	// Terminate GLFW Library
 	}
 
 	void cleanupSwapChain() {
-		for (size_t i = 0; i < swapChainFramebuffers.size(); i++) {
-			vkDestroyFramebuffer(device, swapChainFramebuffers[i], nullptr);
+		vk->cleanupSyncObjects(syncObjects);
+		vkFreeCommandBuffers(vk->device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+		for (size_t i = 0; i < frameBuffers.size(); i++) {
+			vkDestroyFramebuffer(vk->device, frameBuffers[i], nullptr);
 		}
-		vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 
-		vkDestroyPipeline(device, graphicsPipeline, nullptr);
-		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-		vkDestroyRenderPass(device, renderPass, nullptr);
+		vkDestroyPipeline(vk->device, pipeline, nullptr);
+		vkDestroyPipelineLayout(vk->device, pipelineLayout, nullptr);
+		vkDestroyRenderPass(vk->device, renderPass, nullptr);
 
-		for (size_t i = 0; i < mainSwapChain.imageViews.size(); i++) {
-			vkDestroyImageView(device, mainSwapChain.imageViews[i], nullptr);
+		for (size_t i = 0; i < sc.imageViews.size(); i++) {
+			vkDestroyImageView(vk->device, sc.imageViews[i], nullptr);
 		}
-		vkDestroySwapchainKHR(device, mainSwapChain.swapChain, nullptr);
+		vkDestroySwapchainKHR(vk->device, sc.swapChain, nullptr);
 
 	}
 
@@ -211,19 +181,10 @@ private:
 
 
 		// First wait for device to be idle so that all resources are free from use
-		vkDeviceWaitIdle(device);
+		vkDeviceWaitIdle(vk->device);
 
 		cleanupSwapChain();
-
-		// Recreate the swapchain
-		createSwapChain(mainSurface, mainSwapChain);
-		createSwapChainImageViews(mainSwapChain);
-		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		createRenderPass(renderPass, mainSwapChain.format, VK_SAMPLE_COUNT_1_BIT, true, true, false, true);
-		std::vector<VkPushConstantRange> push(1, { VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(PushConstants) });
-		createGraphicsPipeline(graphicsPipeline, pipelineLayout, renderPass, vert, frag, constants::NullVertexDescriptions, &push, VK_NULL_HANDLE, mainSwapChain.extent, VK_SAMPLE_COUNT_1_BIT);
-		swapChainFramebuffers = createFramebuffers(renderPass, mainSwapChain);
-		commandBuffers = createCommandBuffers(commandPool, swapChainFramebuffers.size(),true);
+		createSwapChainObjects();
 	}
 
 	void drawFrame() {
@@ -233,7 +194,7 @@ private:
 		// obviously doesn’t matter.Just like vkAcquireNextImageKHR this function also
 		// takes a timeout.Unlike the semaphores, we manually need to restore the fence
 		// to the unsignaled state by resetting it with the vkResetFences call.
-		vkWaitForFences(device, 1, &inFlightFences[inFlightFrameIndex], VK_TRUE, UINT64_MAX);
+		vkWaitForFences(vk->device, 1, &syncObjects.inFlightFences[inFlightFrameIndex], VK_TRUE, UINT64_MAX);
 
 		// The drawFrame function perform three operations:
 		//	• Acquire an image from the swap chain
@@ -258,7 +219,7 @@ private:
 		// after a window resize.
 		//• VK_SUBOPTIMAL_KHR : The swap chain can still be used to successfully present to the surface, but the surface properties are no longer matched
 		// exactly.
-		VkResult result = vkAcquireNextImageKHR(device, mainSwapChain.swapChain, UINT64_MAX, imageAvailableSemaphore[inFlightFrameIndex], VK_NULL_HANDLE, &imageIndex);
+		VkResult result = vkAcquireNextImageKHR(vk->device, sc.swapChain, UINT64_MAX, syncObjects.imageAvailableSemaphore[inFlightFrameIndex], VK_NULL_HANDLE, &imageIndex);
 
 		// Using the result we can check if the swapchain is out of data and if so we need to recreate it
 		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -271,17 +232,17 @@ private:
 
 
 		// Check if a previous frame is using this image (i.e. there is its fence to wait on)
-		if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
-			vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+		if (syncObjects.imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+			vkWaitForFences(vk->device, 1, &syncObjects.imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
 		}
 		// Mark the image as now being in use by this frame
-		imagesInFlight[imageIndex] = inFlightFences[inFlightFrameIndex];
+		syncObjects.imagesInFlight[imageIndex] = syncObjects.inFlightFences[inFlightFrameIndex];
 
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 		PushConstants constants = { {(float)width,(float)height}, time };
-		writeCommandBuffer(commandBuffers[imageIndex], swapChainFramebuffers[imageIndex], constants);
+		writeCommandBuffer(commandBuffers[imageIndex], frameBuffers[imageIndex], constants);
 		std::vector<VkCommandBuffer> submitCommmandBuffers = { commandBuffers[imageIndex] };
 
 		VkSubmitInfo submitInfo = {};
@@ -291,7 +252,7 @@ private:
 		//the graphics pipeline that writes to the color attachment. That means that theoretically the 
 		//implementation can already start executing our vertex shader and such while the image is not yet available.
 		//Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores.
-		VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[inFlightFrameIndex] };
+		VkSemaphore waitSemaphores[] = { syncObjects.imageAvailableSemaphore[inFlightFrameIndex] };
 
 		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
@@ -303,15 +264,15 @@ private:
 		submitInfo.commandBufferCount = static_cast<uint32_t>(submitCommmandBuffers.size());
 		submitInfo.pCommandBuffers = submitCommmandBuffers.data();
 
-		VkSemaphore signalSemaphores[] = { renderFinishedSemaphore[inFlightFrameIndex] };
+		VkSemaphore signalSemaphores[] = { syncObjects.renderFinishedSemaphore[inFlightFrameIndex] };
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = signalSemaphores;
 
-		vkResetFences(device, 1, &inFlightFences[inFlightFrameIndex]);
+		vkResetFences(vk->device, 1, &syncObjects.inFlightFences[inFlightFrameIndex]);
 
 		// Here we submit the command to draw the triangle.
 		// We also use the current Frame Fence to signal when the command buffer finishes executing, this way we know when a frame is finished
-		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[inFlightFrameIndex]) != VK_SUCCESS) {
+		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, syncObjects.inFlightFences[inFlightFrameIndex]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to submit draw comand buffer!");
 		}
 
@@ -323,9 +284,9 @@ private:
 		//The first two parameters specify which semaphores to wait on before presentation
 		//can happen, just like VkSubmitInfo.
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = &renderFinishedSemaphore[inFlightFrameIndex];
+		presentInfo.pWaitSemaphores = &syncObjects.renderFinishedSemaphore[inFlightFrameIndex];
 
-		VkSwapchainKHR swapChains[] = { mainSwapChain.swapChain };
+		VkSwapchainKHR swapChains[] = { sc.swapChain };
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = swapChains;
 		presentInfo.pImageIndices = &imageIndex;
@@ -375,7 +336,7 @@ private:
 		renderPassInfo.renderPass = renderPass;
 		renderPassInfo.framebuffer = frmBuffer;
 		renderPassInfo.renderArea.offset = { 0,0 };
-		renderPassInfo.renderArea.extent = mainSwapChain.extent;
+		renderPassInfo.renderArea.extent = sc.extent;
 
 		std::array<VkClearValue, 1> clearValues = {};
 		clearValues[0].color = { 0.0f,0.0f,0.0f,1.0f };
@@ -387,7 +348,7 @@ private:
 		vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 		//upload the matrix to the GPU via push constants
 		vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &constants);
 		// Draw Vertex
@@ -406,7 +367,8 @@ private:
 int main() {
 
 	compileShaders();
-	ShaderToyApplication app;
+	VulkanEngine vk;
+	ShaderToyApplication app(&vk);
 
 	try {
 		app.run();

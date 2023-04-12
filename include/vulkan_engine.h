@@ -92,14 +92,16 @@ struct SwapChainSupportDetails {
 };
 
 struct VulkanBackEndData {
-	GLFWwindow* window;
 	VkInstance instance;
 	VkPhysicalDevice physicalDevice;
 	VkDevice device;
 	uint32_t graphicsQueueFamily;
+	uint32_t transferQueueFamily;
 	VkQueue graphicsQueue;
-	VkQueue transientQueue;
-	VkCommandPool commandPool;
+	VkQueue transferQueue;
+	VkQueue presentQueue;
+	VkSampleCountFlagBits maxMSAASamples;
+	VkCommandPool transientCommandPool;
 };
 
 struct VkE_SwapChain {
@@ -153,29 +155,26 @@ class VulkanEngine
 	 */
 public: 
 	VkDevice device = VK_NULL_HANDLE;
-	VkCommandPool transientcommandPool = VK_NULL_HANDLE;
+
+protected:
+	VkInstance instance;
+	VkDebugUtilsMessengerEXT debugMessenger;
+	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+	uint32_t presentFamily; // Main Window Present Family queue family
 	uint32_t graphicsFamily; // Graphics queue family
 	uint32_t transferFamily; // Transfer queue family
 	VkQueue graphicsQueue = VK_NULL_HANDLE;
 	VkQueue presentQueue = VK_NULL_HANDLE;
 	VkQueue transferQueue = VK_NULL_HANDLE;
 	VkSampleCountFlagBits maxMSAASamples = VK_SAMPLE_COUNT_1_BIT;
-	bool framebufferResized = false;
-
-protected:
-	VkInstance instance;
-	GLFWwindow* window;
-	VkDebugUtilsMessengerEXT debugMessenger;
-	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-	uint32_t mainPresentFamily; // Main Window Present Family queue family
-
+	VkCommandPool transientCommandPool = VK_NULL_HANDLE;
 
 	int rateDeviceSuitability(VkPhysicalDevice device);
 	bool isDeviceSuitable(VkPhysicalDevice device,VkSurfaceKHR surface);
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, VkExtent2D actualExtent);
 
 	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 	void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
@@ -202,7 +201,7 @@ public:
 		vkDestroySurfaceKHR(instance, surface, nullptr);
 	}
 	// SwapChain
-	void createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails);
+	void createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails, VkExtent2D actualExtent);
 	void createSwapChainImageViews(const std::vector<VkImage>& images, const VkFormat format, std::vector<VkImageView>& swapChainImageViews);
 	void createSwapChainImageViews(VkE_SwapChain& swapChainDetails);
 	
@@ -258,22 +257,30 @@ public:
 
 	// Command Buffers
 	void createCommandPool(VkCommandPool& pool, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags);
+	inline void setTransientCommandPool(VkCommandPool pool) {
+		transientCommandPool = pool;
+	}
+
 	std::vector<VkCommandBuffer> createCommandBuffers(const VkCommandPool commandPool, uint32_t buffersCount, bool primary);
 	VkCommandBuffer beginSingleTimeCommands();
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 	// Syncronization objects
 	void createSyncObjects(VkE_FrameSyncObjects& syncObjs, uint32_t imagesCount);
 	void cleanupSyncObjects(VkE_FrameSyncObjects& syncObjs);
+	
 
 	VulkanBackEndData getBackEndData() {
 		VulkanBackEndData bd = {
-			window,
 			instance,
 			physicalDevice,
 			device,
 			graphicsFamily,
+			transferFamily,
 			graphicsQueue,
-			transferQueue
+			transferQueue,
+			presentQueue,
+			maxMSAASamples,
+			transientCommandPool
 		};
 
 		return bd;
@@ -317,8 +324,8 @@ protected:
 	VkRenderPass renderPass = VK_NULL_HANDLE;
 	VkPipeline pipeline = VK_NULL_HANDLE;
 	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-	float width = 0;
-	float height = 0;
+	int width = 0;
+	int height = 0;
 protected:
 	/*! @brief Starts the glfw library and create a window object
 	*  @param[in] width - Initial width of the window. Must be greater than zero

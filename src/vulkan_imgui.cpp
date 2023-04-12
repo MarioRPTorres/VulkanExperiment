@@ -362,7 +362,8 @@ void VkEImgui_CreateViewportSwapBufferObjects(VkEImgui_Viewport* vp) {
 	VulkanEngine* vk = bd->engine;
 	VulkanBackEndData vBd = bd->engine->getBackEndData();
 
-	vk->createSwapChain(vp->surface, vp->sc);
+	VkExtent2D extent = { static_cast<uint32_t>(vp->width), static_cast<uint32_t>(vp->height) };
+	vk->createSwapChain(vp->surface, vp->sc,extent);
 	vk->createSwapChainImageViews(vp->sc.images, vp->sc.format, vp->sc.imageViews);
 	bd->engine->createRenderPass(vp->renderPass, vp->sc.format, VK_SAMPLE_COUNT_1_BIT, true, true, false, vp->ClearEnable);
 	VkEImgui_CreatePipeline(bd);
@@ -395,6 +396,8 @@ static void VkEImgui_CreateWindow(ImGuiViewport* viewport)
 	viewport->RendererUserData = (void*)vp;
 	vp->ClearEnable = (viewport->Flags & ImGuiViewportFlags_NoRendererClear) ? false : true;
 	vp->WindowOwned = true;
+	vp->width = viewport->Size.x;
+	vp->height = viewport->Size.y;
 	// ImGui_ImplVulkanH_Window* wd = &vd->Window;
 	// ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
 
@@ -405,7 +408,7 @@ static void VkEImgui_CreateWindow(ImGuiViewport* viewport)
 	VkEImgui_CreateDescriptorSetLayout(bd);
 	VkEImgui_CreatePipelineLayout(bd);
 	// Create Command pool x
-	vk->createCommandPool(vp->commandPool, vk->graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+	vk->createCommandPool(vp->commandPool, vkBd.graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
 	// Create surface
 	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
@@ -869,6 +872,7 @@ void VkEImgui_init(VkEImgui_Backend& imBd) {
 	IM_ASSERT(imBd.mainViewport.sc.imageCount >= imBd.mainViewport.sc.minImageCount && "Image count lower than minimum image count");
 
 	VulkanEngine* vk = imBd.engine;
+	VulkanBackEndData vkbd = vk->getBackEndData();
 	//IM_ASSERT(imBd.descriptorPool != VK_NULL_HANDLE);
 	//IM_ASSERT(imBd.descriptorSetLayout != VK_NULL_HANDLE);
 	//IM_ASSERT(imBd.pipelineLayout != VK_NULL_HANDLE);
@@ -929,7 +933,7 @@ void VkEImgui_init(VkEImgui_Backend& imBd) {
 
 	// Setup Binding for Main Window
 	ImGui_ImplGlfw_InitForVulkan(mvp->window, true);
-	vk->createCommandPool(mvp->commandPool, vk->graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+	vk->createCommandPool(mvp->commandPool, vkbd.graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 	mvp->commandBuffers = vk->createCommandBuffers(mvp->commandPool, mvp->sc.imageCount, true);
 	vk->createRenderPass(mvp->renderPass, mvp->sc.format, VK_SAMPLE_COUNT_1_BIT, imBd.mainViewportFirstPass, true, false, imBd.mainViewportFirstPass);
 	mvp->frameBuffers = vk->createFramebuffers(mvp->renderPass, mvp->sc);

@@ -465,7 +465,7 @@ void VulkanEngine::pickPhysicalDevice(VkSurfaceKHR surface) {
 	QueueFamilyIndices queueFamilies = findQueueFamilies(physicalDevice, surface);
 	graphicsFamily = queueFamilies.graphicsFamily.value;
 	transferFamily = queueFamilies.transferFamily.value;
-	mainPresentFamily = queueFamilies.presentFamily.value;
+	presentFamily = queueFamilies.presentFamily.value;
 	// Add the multisample anti-aliasing count
 	maxMSAASamples = getMaxUsableSampleCount();
 }
@@ -475,7 +475,7 @@ void VulkanEngine::createLogicalDevice() {
 	
 	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 	// Set of unique Queue Family index values. There is no repetition of indeces in a set.
-	std::set<uint32_t> uniqueQueueFamilies = { graphicsFamily , mainPresentFamily, transferFamily };
+	std::set<uint32_t> uniqueQueueFamilies = { graphicsFamily , presentFamily, transferFamily };
 
 	float queuePriority = 1.0f;
 	// Loop over all necessary queueFamilies to create a vector of VkDeviceQueueCreationInfo
@@ -534,7 +534,7 @@ void VulkanEngine::createLogicalDevice() {
 	}
 
 	vkGetDeviceQueue(device, graphicsFamily, 0, &graphicsQueue);
-	vkGetDeviceQueue(device, mainPresentFamily, 0, &presentQueue);
+	vkGetDeviceQueue(device, presentFamily, 0, &presentQueue);
 	// Transfer Challenge:
 	// Use a different queue family and queue specifically for transfer operations.
 	vkGetDeviceQueue(device, transferFamily, 0, &transferQueue);
@@ -562,20 +562,11 @@ VkPresentModeKHR VulkanEngine::chooseSwapPresentMode(const std::vector<VkPresent
 	return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-VkExtent2D VulkanEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
+VkExtent2D VulkanEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, VkExtent2D actualExtent) {
 	if (capabilities.currentExtent.width != UINT32_MAX) {
 		return capabilities.currentExtent;
 	}
 	else {
-		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
-
-		VkExtent2D actualExtent = {
-			static_cast<uint32_t>(width),
-			static_cast<uint32_t>(height)
-		};
-
-
 		actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
 		actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
 
@@ -583,12 +574,12 @@ VkExtent2D VulkanEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabi
 	}
 }
 
-void VulkanEngine::createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails) {
+void VulkanEngine::createSwapChain(VkSurfaceKHR surface, VkE_SwapChain& swapChainDetails,VkExtent2D actualExtent) {
 	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice,surface);
 
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 	VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities,actualExtent);
 
 	uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
 	if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
@@ -1421,7 +1412,7 @@ VkCommandBuffer VulkanEngine::beginSingleTimeCommands() {
 	VkCommandBufferAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool = transientcommandPool;
+	allocInfo.commandPool = transientCommandPool;
 	allocInfo.commandBufferCount = 1;
 
 	VkCommandBuffer commandBuffer;
@@ -1457,7 +1448,7 @@ void VulkanEngine::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
 	vkQueueWaitIdle(transferQueue);
 	// Memory that is bound to a buffer object may be freed once
 	// the buffer is no longer used, so let’s free it after the buffer has been destroyed
-	vkFreeCommandBuffers(device, transientcommandPool, 1, &commandBuffer);
+	vkFreeCommandBuffers(device, transientCommandPool, 1, &commandBuffer);
 }
 
 void VulkanEngine::createImage(uint32_t width, uint32_t height,

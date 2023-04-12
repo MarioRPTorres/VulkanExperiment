@@ -152,6 +152,7 @@ public:
 	void run() {
 		mipLevels = 3;
 		initWindow(WIDTH,HEIGHT,true,this, framebufferResizeCallback, key_callback);
+		glfwGetFramebufferSize(window, &width, &height);
 		initVulkan();
 		if (enableImgui) {
 			VkEImgui_init(imGuiBackEnd);
@@ -169,6 +170,7 @@ private:
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> textureImages;
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	uint32_t mipLevels;
+	VkCommandPool transientCommandPool = VK_NULL_HANDLE;
 
 	bool firstSwapChain = true;
 
@@ -185,10 +187,12 @@ private:
 		vk->setupDebugMessenger();
 		vk->createSurface(window,surface);
 		vk->pickPhysicalDevice(surface);
-		msaaSamples = vk->maxMSAASamples;
 		vk->createLogicalDevice();
-		graphicsQueue = vk->graphicsQueue;
-		presentQueue = vk->presentQueue;
+
+		VulkanBackEndData vkbd = vk->getBackEndData();
+		msaaSamples = vkbd.maxMSAASamples;
+		graphicsQueue = vkbd.graphicsQueue;
+		presentQueue = vkbd.presentQueue;
 		// Reuseable descriptorSetLayout
 		createDescriptorSetLayout();
 		// Reuseable ShaderModules
@@ -199,15 +203,16 @@ private:
 		vert = vk->createShaderModule(vertShaderCode);
 		frag = vk->createShaderModule(fragShaderCode);
 
-		vk->createCommandPool(commandPool,vk->graphicsFamily,0);
+		vk->createCommandPool(commandPool,vkbd.graphicsQueueFamily,0);
 		// If transfer family and graphics family are the same use the same command pool
-		if (vk->graphicsFamily == vk->transferFamily)
-			vk->transientcommandPool = commandPool;
+		if (vkbd.graphicsQueueFamily == vkbd.transferQueueFamily)
+			transientCommandPool = commandPool;
 		else {
 			// Transfer Challenge & Transient Command Pool Challenge:
 			// Create a transient pool for short lived command buffers for memory allocation optimizations.
-			vk->createCommandPool(vk->transientcommandPool, vk->transferFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+			vk->createCommandPool(transientCommandPool, vkbd.transferQueueFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
 		}
+		vk->setTransientCommandPool(transientCommandPool);
 
 		// Create Buffer Resources
 		vk->createVertexBuffer(vertices.data(),vertices.size()*sizeof(vertices[0]), vertexBuffer);
@@ -308,7 +313,7 @@ private:
 
 		// Here there is a choice for the Allocator function
 		vkDestroyCommandPool(vk->device, commandPool, nullptr);
-		if (vk->transientcommandPool != commandPool) vkDestroyCommandPool(vk->device, vk->transientcommandPool, nullptr);
+		if (transientCommandPool != commandPool) vkDestroyCommandPool(vk->device, transientCommandPool, nullptr);
 		if (enableImgui) {
 			// Resources to destroy when the program ends
 			VkEImgui_cleanupBackEndObjects(imGuiBackEnd);
@@ -348,12 +353,21 @@ private:
 			vk->destroyBufferBundle(uniformBuffers[i]);
 		}
 
+		int width, height;
+		glfwGetFramebufferSize(window, &width, &height);
+
+		VkExtent2D actualExtent = {
+			static_cast<uint32_t>(width),
+			static_cast<uint32_t>(height)
+		};
+
 		vkDestroyDescriptorPool(vk->device, descriptorPool, nullptr);
 	}
 
 	void createSwapChainObjects() {
 		// Recreate the swapchain
-		vk->createSwapChain(surface, sc);
+		VkExtent2D extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+		vk->createSwapChain(surface, sc,extent);
 		vk->createSwapChainImageViews(sc);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, !enableImgui, true, true);

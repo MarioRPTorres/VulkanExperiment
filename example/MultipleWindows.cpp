@@ -192,36 +192,25 @@ public:
 			vk->pickPhysicalDevice(surface);
 			vk->createLogicalDevice();
 		}
-		graphicsQueue = vk->graphicsQueue;
-		presentQueue = vk->presentQueue;
-		vk->createSwapChain(surface, sc);
-		vk->createSwapChainImageViews(sc.images, sc.format, sc.imageViews);
-		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, true, false, true);
 
-		size_t intCount = (int)(vert.size() * sizeof(char) / sizeof(uint32_t));
-		shaderCode32 vert32((uint32_t*)vert.data(), (uint32_t*)vert.data() + intCount);
+		auto vkbd = vk->getBackEndData();
+		graphicsQueue = vkbd.graphicsQueue;
+		presentQueue = vkbd.presentQueue;
 
 		vertShaderModule = vk->createShaderModule(vert);
 		fragShaderModule = vk->createShaderModule(frag);
-		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vertShaderModule, fragShaderModule, P2Vertex::getDescriptions(), nullptr, VK_NULL_HANDLE, sc.extent, msaaSamples);
-		vk->createCommandPool(commandPool, vk->graphicsFamily, 0);
+		vk->createCommandPool(commandPool, vkbd.graphicsQueueFamily, 0);
 		// If transfer family and graphics family are the same use the same command pool
-		if (vk->graphicsFamily == vk->transferFamily && vk->transientcommandPool==VK_NULL_HANDLE)
-			vk->transientcommandPool = commandPool;
-		else if (vk->transientcommandPool == VK_NULL_HANDLE) {
-			// Transfer Challenge & Transient Command Pool Challenge:
-			// Create a transient pool for short lived command buffers for memory allocation optimizations.
-			vk->createCommandPool(vk->transientcommandPool, vk->transferFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+		VkCommandPool transientCommandPool;
+		if (vkbd.transientCommandPool == VK_NULL_HANDLE) {
+			vk->createCommandPool(transientCommandPool, vkbd.transferQueueFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+			vk->setTransientCommandPool(transientCommandPool);
 		}
-		frameBuffers = vk->createFramebuffers(renderPass, sc);
 		vk->createVertexBuffer(vertices.data(), vertices.size() * sizeof(vertices[0]), vertexBuffer);
 		vk->createIndexBuffer(indices.data(), indices.size() * sizeof(indices[0]), indexBuffer);
 		indexCount = static_cast<uint32_t>(indices.size());
-		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(),true);
 
-		// Write the command buffers after the descriptor sets are updated
-		writeCommandBuffers();
-		vk->createSyncObjects(syncObjects, sc.imageCount);
+		createSwapChainObjects();
 	}
 
 	int mainLoop() {
@@ -254,10 +243,8 @@ public:
 		vk->destroyBufferBundle(vertexBuffer);
 		vk->destroyBufferBundle(indexBuffer);
 
-		vk->cleanupSyncObjects(syncObjects);
-
 		// Here there is a choice for the Allocator function
-		if (vk->transientcommandPool != commandPool) vkDestroyCommandPool(vk->device, commandPool, nullptr);
+		vkDestroyCommandPool(vk->device, commandPool, nullptr);
 
 		vk->destroySurface(surface);
 
@@ -266,7 +253,7 @@ public:
 	}
 
 	void cleanupSwapChain() {
-
+		vk->cleanupSyncObjects(syncObjects);
 		for (size_t i = 0; i < frameBuffers.size(); i++) {
 			vkDestroyFramebuffer(vk->device, frameBuffers[i], nullptr);
 		}
@@ -284,6 +271,20 @@ public:
 
 	}
 
+	void createSwapChainObjects() {
+		VkExtent2D extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+		// Recreate the swapchain
+		vk->createSwapChain(surface, sc,extent);
+		vk->createSwapChainImageViews(sc.images, sc.format, sc.imageViews);
+		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
+		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, true, false, true);
+		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vertShaderModule, fragShaderModule, P2Vertex::getDescriptions(), nullptr, VK_NULL_HANDLE, sc.extent, msaaSamples);
+		frameBuffers = vk->createFramebuffers(renderPass, sc);
+		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(), true);
+		vk->createSyncObjects(syncObjects, sc.imageCount);
+		writeCommandBuffers();
+	}
+
 	void recreateSwapChain() {
 		swapChainOutdated = false;
 		// Swap chain recreation for events like window resizing
@@ -294,16 +295,7 @@ public:
 		vkWaitForFences(vk->device, inFlightFences.size(), inFlightFences.data(), VK_TRUE, UINT64_MAX);
 
 		cleanupSwapChain();
-
-		// Recreate the swapchain
-		vk->createSwapChain(surface, sc);
-		vk->createSwapChainImageViews(sc.images, sc.format, sc.imageViews);
-		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, true, false, true);
-		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vertShaderModule, fragShaderModule, P2Vertex::getDescriptions(),nullptr, VK_NULL_HANDLE, sc.extent, msaaSamples);
-		frameBuffers = vk->createFramebuffers(renderPass, sc);
-		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(),true);
-		writeCommandBuffers();
+		createSwapChainObjects();
 	}
 
 
@@ -551,7 +543,8 @@ int main() {
 			}
 		}
 		vkDeviceWaitIdle(vk.device);
-		vkDestroyCommandPool(vk.device, vk.transientcommandPool, nullptr);
+		auto vkbd = vk.getBackEndData();
+		vkDestroyCommandPool(vk.device, vkbd.transientCommandPool, nullptr);
 		vk.shutdownVulkanEngine();
 		glfwTerminate();	// Terminate GLFW Library
 	}

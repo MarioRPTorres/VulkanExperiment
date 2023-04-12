@@ -232,11 +232,12 @@ private:
 		vk->createSurface(window, surface);
 		vk->pickPhysicalDevice(surface);
 		vk->createLogicalDevice();
-		graphicsQueue = vk->graphicsQueue;
-		presentQueue = vk->presentQueue;
-		vk->createCommandPool(commandPool, vk->graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-		vk->createCommandPool(secondaryCommandPool, vk->transferFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-		vk->transientcommandPool = secondaryCommandPool;
+		auto vkbd = vk->getBackEndData();
+		graphicsQueue = vkbd.graphicsQueue;
+		presentQueue = vkbd.presentQueue;
+		vk->createCommandPool(commandPool, vkbd.graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+		vk->createCommandPool(secondaryCommandPool, vkbd.transferQueueFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+		vk->setTransientCommandPool( secondaryCommandPool);
 	
 		// Window Rendering objects
 		createDescriptorSetLayout();
@@ -528,7 +529,8 @@ private:
 	}
 
 	void createSwapChainObjects() {
-		vk->createSwapChain(surface, sc);
+		VkExtent2D extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+		vk->createSwapChain(surface, sc,extent);
 		vk->createSwapChainImageViews(sc);
 		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, true, false, true);
 		std::vector<VkPushConstantRange> push(1,{ VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(float) });
