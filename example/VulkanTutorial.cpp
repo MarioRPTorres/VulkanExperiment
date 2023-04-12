@@ -231,99 +231,36 @@ private:
 		firstSwapChain = false;
 	}
 
-	void mainLoop() {
-		// Event Handler
-		static auto lastTime = std::chrono::high_resolution_clock::now();
-		while (!glfwWindowShouldClose(window)) {
-			glfwPollEvents();
-
-			if (enableImgui) {
-				VkE_Imgui_NewFrame();
-				ImGui_ImplGlfw_NewFrame();
-				ImGui::NewFrame();
-				ImGui::ShowDemoWindow();
-				ImGui::Begin("Bobby",NULL,0);
-				if (ImGui::BeginMenuBar())
-				{
-					if (ImGui::BeginMenu("File"))
-					{
-						if (ImGui::MenuItem("Import content")) {
-						}
-						ImGui::EndMenu();
-					}
-					if (ImGui::BeginMenu("Edit"))
-					{
-						if (ImGui::MenuItem("Undo", "CTRL+Z")) {}
-						if (ImGui::MenuItem("Redo", "CTRL+Y", false, false)) {}  // Disabled item
-						ImGui::Separator();
-						if (ImGui::MenuItem("Cut", "CTRL+X")) {}
-						if (ImGui::MenuItem("Copy", "CTRL+C")) {}
-						if (ImGui::MenuItem("Paste", "CTRL+V")) {}
-						ImGui::EndMenu();
-					}
-					ImGui::EndMenuBar();
-				}
-				ImGui::End();
-				ImGui::Render();
-			}
-			drawFrame();
-
-			// Update and Render additional Platform Windows
-			if (enableImgui){
-				static ImGuiIO& imguiIo = ImGui::GetIO(); (void)imguiIo;
-				if (imguiIo.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-					ImGui::UpdatePlatformWindows();
-					ImGui::RenderPlatformWindowsDefault();
-				}
-			}
-			if (swapChainOutdated)
-				recreateSwapChain();
-			else
-				presentFrame();
-
-			auto currentTime = std::chrono::high_resolution_clock::now();
-			float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
-			if (time > 5.0f) {
-				lastTime = std::chrono::high_resolution_clock::now();
-				descriptorGroup = (descriptorGroup + 1) % MIRROR_DESCRIPTOR_SET_COUNT;
-				// First wait for device to be idle so that all resources are free from use
-				vkDeviceWaitIdle(vk->device);
-				writeCommandBuffers();
-			}
+	void createSwapChainObjects() {
+		// Recreate the swapchain
+		VkExtent2D extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+		vk->createSwapChain(surface, sc, extent);
+		vk->createSwapChainImageViews(sc);
+		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
+		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, !enableImgui, true, true);
+		vk->createDescriptorPool(descriptorPool,
+			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT,
+			sc.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
+			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
+		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass,
+			vert, frag,
+			PCTVertex::getDescriptions(), nullptr, descriptorSetLayout,
+			sc.extent,
+			msaaSamples);
+		createColorResources();
+		createDepthResources();
+		frameBuffers = vk->createFramebuffers(renderPass, sc, msaaColorImage.view, depthImage.view);
+		createUniformBuffers();
+		createDescriptorSets();
+		updateDescriptorSet(textureImages, 0);
+		updateDescriptorSet(updatedTextureImages, 1);
+		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(), true);
+		// Write the command buffers after the descriptor sets are updated
+		writeCommandBuffers();
+		if (enableImgui && !firstSwapChain) {
+			recreateImguiSwapChainObjects(imGuiBackEnd, sc, imguiInfo, MAX_FRAME_IN_FLIGHT);
 		}
-
-		vkDeviceWaitIdle(vk->device);
-	}
-
-	void cleanup() {
-		cleanupSwapChain();
-
-		vkDestroyShaderModule(vk->device, vert, nullptr);
-		vkDestroyShaderModule(vk->device, frag, nullptr);
-
-		vk->cleanupSampledImage(textureImages[0]);
-		vk->cleanupSampledImage(textureImages[1]);
-		vk->cleanupSampledImage(updatedTextureImages[0]);
-		vk->cleanupSampledImage(updatedTextureImages[1]);
-		// Here there is a choice for the Allocator function
-		vkDestroyDescriptorSetLayout(vk->device, descriptorSetLayout, nullptr);
-		// Here there is a choice for the Allocator function
-		vk->destroyBufferBundle(vertexBuffer);
-		vk->destroyBufferBundle(indexBuffer);
-
-		// Here there is a choice for the Allocator function
-		vkDestroyCommandPool(vk->device, commandPool, nullptr);
-		if (transientCommandPool != commandPool) vkDestroyCommandPool(vk->device, transientCommandPool, nullptr);
-		if (enableImgui) {
-			// Resources to destroy when the program ends
-			VkEImgui_cleanupBackEndObjects(imGuiBackEnd);
-			VkEImgui_Shutdown();
-		}
-
-		if (surface != VK_NULL_HANDLE) { vk->destroySurface(surface); surface = VK_NULL_HANDLE; }
-		vk->shutdownVulkanEngine();
-		glfwDestroyWindow(window);	// Cleanup Window Resources
-		glfwTerminate();	// Terminate GLFW Library
+		vk->createSyncObjects(syncObjects, sc.imageCount);
 	}
 
 	void cleanupSwapChain() {
@@ -364,38 +301,36 @@ private:
 		vkDestroyDescriptorPool(vk->device, descriptorPool, nullptr);
 	}
 
-	void createSwapChainObjects() {
-		// Recreate the swapchain
-		VkExtent2D extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
-		vk->createSwapChain(surface, sc,extent);
-		vk->createSwapChainImageViews(sc);
-		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, !enableImgui, true, true);
-		vk->createDescriptorPool(descriptorPool,
-			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT,
-			sc.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
-			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
-		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, 
-			vert, frag, 
-			PCTVertex::getDescriptions(), nullptr, descriptorSetLayout, 
-			sc.extent, 
-			msaaSamples);
-		createColorResources();
-		createDepthResources();
-		frameBuffers = vk->createFramebuffers(renderPass, sc, msaaColorImage.view, depthImage.view);
-		createUniformBuffers();
-		createDescriptorSets();
-		updateDescriptorSet(textureImages, 0);
-		updateDescriptorSet(updatedTextureImages, 1);
-		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(), true);
-		// Write the command buffers after the descriptor sets are updated
-		writeCommandBuffers();
-		if (enableImgui && !firstSwapChain) {
-			recreateImguiSwapChainObjects(imGuiBackEnd, sc, imguiInfo, MAX_FRAME_IN_FLIGHT);
-		}
-		vk->createSyncObjects(syncObjects, sc.imageCount);
-	}
+	void cleanup() {
+		cleanupSwapChain();
 
+		vkDestroyShaderModule(vk->device, vert, nullptr);
+		vkDestroyShaderModule(vk->device, frag, nullptr);
+
+		vk->cleanupSampledImage(textureImages[0]);
+		vk->cleanupSampledImage(textureImages[1]);
+		vk->cleanupSampledImage(updatedTextureImages[0]);
+		vk->cleanupSampledImage(updatedTextureImages[1]);
+		// Here there is a choice for the Allocator function
+		vkDestroyDescriptorSetLayout(vk->device, descriptorSetLayout, nullptr);
+		// Here there is a choice for the Allocator function
+		vk->destroyBufferBundle(vertexBuffer);
+		vk->destroyBufferBundle(indexBuffer);
+
+		// Here there is a choice for the Allocator function
+		vkDestroyCommandPool(vk->device, commandPool, nullptr);
+		if (transientCommandPool != commandPool) vkDestroyCommandPool(vk->device, transientCommandPool, nullptr);
+		if (enableImgui) {
+			// Resources to destroy when the program ends
+			VkEImgui_cleanupBackEndObjects(imGuiBackEnd);
+			VkEImgui_Shutdown();
+		}
+
+		if (surface != VK_NULL_HANDLE) { vk->destroySurface(surface); surface = VK_NULL_HANDLE; }
+		vk->shutdownVulkanEngine();
+		glfwDestroyWindow(window);	// Cleanup Window Resources
+		glfwTerminate();	// Terminate GLFW Library
+	}
 
 	void recreateSwapChain() {
 		swapChainOutdated = false;
@@ -501,6 +436,14 @@ private:
 		}
 	}
 
+	void createTexture(VkE_Image& image, std::string imageFile) {
+		cv::Mat matImage = loadImage(imageFile);
+
+		vk->createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(), (char*)matImage.data, mipLevels, VK_SAMPLE_COUNT_1_BIT);
+
+		matImage.release();
+	}
+
 	void updateDescriptorSet(std::array<VkE_Image, MAX_SAMPLED_IMAGES> images, int groupIndex) {
 
 
@@ -541,6 +484,71 @@ private:
 			vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 		}
 	}
+
+	void mainLoop() {
+		// Event Handler
+		static auto lastTime = std::chrono::high_resolution_clock::now();
+		while (!glfwWindowShouldClose(window)) {
+			glfwPollEvents();
+
+			if (enableImgui) {
+				VkE_Imgui_NewFrame();
+				ImGui_ImplGlfw_NewFrame();
+				ImGui::NewFrame();
+				ImGui::ShowDemoWindow();
+				ImGui::Begin("Bobby", NULL, 0);
+				if (ImGui::BeginMenuBar())
+				{
+					if (ImGui::BeginMenu("File"))
+					{
+						if (ImGui::MenuItem("Import content")) {
+						}
+						ImGui::EndMenu();
+					}
+					if (ImGui::BeginMenu("Edit"))
+					{
+						if (ImGui::MenuItem("Undo", "CTRL+Z")) {}
+						if (ImGui::MenuItem("Redo", "CTRL+Y", false, false)) {}  // Disabled item
+						ImGui::Separator();
+						if (ImGui::MenuItem("Cut", "CTRL+X")) {}
+						if (ImGui::MenuItem("Copy", "CTRL+C")) {}
+						if (ImGui::MenuItem("Paste", "CTRL+V")) {}
+						ImGui::EndMenu();
+					}
+					ImGui::EndMenuBar();
+				}
+				ImGui::End();
+				ImGui::Render();
+			}
+			drawFrame();
+
+			// Update and Render additional Platform Windows
+			if (enableImgui) {
+				static ImGuiIO& imguiIo = ImGui::GetIO(); (void)imguiIo;
+				if (imguiIo.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+					ImGui::UpdatePlatformWindows();
+					ImGui::RenderPlatformWindowsDefault();
+				}
+			}
+			if (swapChainOutdated)
+				recreateSwapChain();
+			else
+				presentFrame();
+
+			auto currentTime = std::chrono::high_resolution_clock::now();
+			float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
+			if (time > 5.0f) {
+				lastTime = std::chrono::high_resolution_clock::now();
+				descriptorGroup = (descriptorGroup + 1) % MIRROR_DESCRIPTOR_SET_COUNT;
+				// First wait for device to be idle so that all resources are free from use
+				vkDeviceWaitIdle(vk->device);
+				writeCommandBuffers();
+			}
+		}
+
+		vkDeviceWaitIdle(vk->device);
+	}
+
 
 	void drawFrame() {
 		// The vkWaitForFences function takes an array of fences and waits for either
@@ -701,14 +709,6 @@ private:
 
 		// Syncronization is only done with GPU-GPU not CPU-GPU so more work can still be submitted. Gpu only waits for the previous operation to be ready.
 		inFlightFrameIndex = (inFlightFrameIndex + 1) % MAX_FRAME_IN_FLIGHT;
-	}
-
-	void createTexture(VkE_Image& image, std::string imageFile){
-		cv::Mat matImage = loadImage(imageFile);
-
-		vk->createSampledImage(image, matImage.cols, matImage.rows, matImage.elemSize(),(char*) matImage.data, mipLevels, VK_SAMPLE_COUNT_1_BIT);
-
-		matImage.release();
 	}
 
 	void writeCommandBuffers() {
