@@ -21,6 +21,9 @@ const bool enableImgui = true;
 const bool enableImgui = false;
 #endif
 
+const bool enableMultiSampling = false;
+const bool enableDepthTest = false;
+
 #define QUDI(x) #x
 #define STRING(x) QUDI(x)
 
@@ -151,7 +154,7 @@ class HelloTriangleApplication:protected VulkanWindow {
 public:
 	void run() {
 		mipLevels = 3;
-		initWindow(WIDTH,HEIGHT,true,this, framebufferResizeCallback, key_callback);
+		initWindow("VulkanTutorial", WIDTH, HEIGHT, true, this, framebufferResizeCallback, key_callback);
 		glfwGetFramebufferSize(window, &width, &height);
 		initVulkan();
 		if (enableImgui) {
@@ -190,7 +193,7 @@ private:
 		vk->createLogicalDevice();
 
 		VulkanBackEndData vkbd = vk->getBackEndData();
-		msaaSamples = vkbd.maxMSAASamples;
+		msaaSamples = (enableMultiSampling ? vkbd.maxMSAASamples : VK_SAMPLE_COUNT_1_BIT);
 		graphicsQueue = vkbd.graphicsQueue;
 		presentQueue = vkbd.presentQueue;
 		// Reuseable descriptorSetLayout
@@ -237,7 +240,7 @@ private:
 		vk->createSwapChain(surface, sc, extent);
 		vk->createSwapChainImageViews(sc);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
-		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, !enableImgui, true, true);
+		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, !enableImgui, enableDepthTest, true);
 		vk->createDescriptorPool(descriptorPool,
 			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT,
 			sc.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
@@ -247,9 +250,12 @@ private:
 			PCTVertex::getDescriptions(), nullptr, descriptorSetLayout,
 			sc.extent,
 			msaaSamples);
-		createColorResources();
-		createDepthResources();
-		frameBuffers = vk->createFramebuffers(renderPass, sc, msaaColorImage.view, depthImage.view);
+		if (enableMultiSampling) createColorResources();
+		if (enableDepthTest) createDepthResources();
+		frameBuffers = vk->createFramebuffers(renderPass, sc,
+			(enableMultiSampling ? msaaColorImage.view : VK_NULL_HANDLE), 
+			(enableDepthTest ? depthImage.view : VK_NULL_HANDLE)
+		);
 		createUniformBuffers();
 		createDescriptorSets();
 		updateDescriptorSet(textureImages, 0);
@@ -265,8 +271,8 @@ private:
 
 	void cleanupSwapChain() {
 		vk->cleanupSyncObjects(syncObjects);
-		vk->cleanupSampledImage(msaaColorImage);
-		vk->cleanupSampledImage(depthImage);
+		if(enableMultiSampling) vk->cleanupSampledImage(msaaColorImage);
+		if(enableDepthTest) vk->cleanupSampledImage(depthImage);
 
 		for (size_t i = 0; i < frameBuffers.size(); i++) {
 			vkDestroyFramebuffer(vk->device, frameBuffers[i], nullptr);

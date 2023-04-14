@@ -202,29 +202,10 @@ private:
 	VkE_Image texture;
 	float angle = 0.0f;
 
-	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-		// Our HelloTriangleApplication object
-		auto app = reinterpret_cast<PeekaBooApp*>(glfwGetWindowUserPointer(window));
-		// This flag is used for explicit resize because it is not garanteed that the driver will send a out-of-date error when the window is resized.
-		app->framebufferResized = true;
-	}
-
 	void init() {
 		msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-		// Initiates the GLFW library
-		glfwInit();
 
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // Tells GLFW to not create an OpenGL context
-		//glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);	// Disable resizable window
-
-		window = glfwCreateWindow(width, height, "PeekaBoo", nullptr, nullptr);
-		// Sets a pointer to the application inside window handle
-		glfwSetWindowUserPointer(window, this);
-		// Sets a callback for size change
-		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-
-		// Set key input callback
-		//glfwSetKeyCallback(window, key_callback);
+		initWindow("PeekaBoo", width, height, true, this, framebufferResizeCallback, nullptr);
 		
 		// Vulkan Setup
 		vk->createInstance();

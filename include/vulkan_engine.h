@@ -336,7 +336,7 @@ protected:
 	*  @param[in] keyCallback - Callback function for when a key gets pressed
 	*
 	*/
-	void initWindow(int width, int height, bool resizable, void* userPointer, GLFWframebuffersizefun resizeCallback, GLFWkeyfun keyCallback);
+	void initWindow(std::string windowName,int width, int height, bool resizable, void* userPointer, GLFWframebuffersizefun resizeCallback, GLFWkeyfun keyCallback);
 	void createColorResources();
 	void createDepthResources();
 

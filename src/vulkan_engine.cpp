@@ -1097,15 +1097,26 @@ void VulkanEngine::createGraphicsPipeline(
 
 std::vector<VkFramebuffer> VulkanEngine::createFramebuffers(const VkRenderPass renderPass, const VkE_SwapChain& swapChain, VkImageView colorAttachment, VkImageView depthAttachment) {
 	std::vector<VkFramebuffer> frameBuffers(swapChain.imageViews.size(),VK_NULL_HANDLE);
-	std::vector<VkImageView> attachments;
-	if (colorAttachment) attachments.push_back(colorAttachment);
-	if (depthAttachment) attachments.push_back(depthAttachment);
+	std::vector<VkImageView> attachments = {VK_NULL_HANDLE};
+	uint32_t scViewIndex = 0;
+	if (colorAttachment && depthAttachment) {
+		attachments = {colorAttachment, depthAttachment, VK_NULL_HANDLE };
+		scViewIndex = 2;
+	}
+	else if (!colorAttachment && depthAttachment) {
+		attachments = { VK_NULL_HANDLE, depthAttachment };
+		scViewIndex = 0;
+	}
+	else if (colorAttachment && !depthAttachment) {
+		attachments = { colorAttachment, VK_NULL_HANDLE };
+		scViewIndex = 1;
+	}
+	
 
-	attachments.push_back(VK_NULL_HANDLE);
 	uint32_t attachmentSize = static_cast<uint32_t> (attachments.size());
 
 	for (size_t i = 0; i < swapChain.imageViews.size(); i++) {
-		attachments[attachmentSize - 1] = swapChain.imageViews[i];
+		attachments[scViewIndex] = swapChain.imageViews[i];
 
 		VkFramebufferCreateInfo framebufferInfo = {};
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -1846,7 +1857,7 @@ void VulkanEngine::shutdownVulkanEngine() {
 };
 
 //********************** Vulkan Window Class ******************************//
-void VulkanWindow::initWindow(int width, int height, bool resizable, void* userPointer, GLFWframebuffersizefun resizeCallback, GLFWkeyfun keyCallback) {
+void VulkanWindow::initWindow(std::string windowName,int width, int height, bool resizable, void* userPointer, GLFWframebuffersizefun resizeCallback, GLFWkeyfun keyCallback) {
 	// Initiates the GLFW library. glfwInit handles the case when the library is initiated more than wonce
 	glfwInit();
 
@@ -1854,14 +1865,16 @@ void VulkanWindow::initWindow(int width, int height, bool resizable, void* userP
 	if (!resizable) {
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);	// Disable resizable window
 	}
-	window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
+	window = glfwCreateWindow(width, height, windowName.c_str(), nullptr, nullptr);
 	// Sets a pointer to the application inside window handle
-	glfwSetWindowUserPointer(window, userPointer);
+	if (userPointer != nullptr) glfwSetWindowUserPointer(window, userPointer);
 	// Sets a callback for size change
-	glfwSetFramebufferSizeCallback(window, resizeCallback);
+	if (resizeCallback != nullptr)
+		glfwSetFramebufferSizeCallback(window, resizeCallback);
 
 	// Set key input callback
-	glfwSetKeyCallback(window, keyCallback);
+	if (keyCallback != nullptr)
+		glfwSetKeyCallback(window, keyCallback);
 }
 
 void VulkanWindow::createColorResources() {
