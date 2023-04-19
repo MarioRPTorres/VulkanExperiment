@@ -21,6 +21,7 @@ namespace constants
 {
 	// actual global variables
 	extern const std::array<VkVertexInputAttributeDescription, 1> P2VertexAttributes;
+	extern const std::array<VkVertexInputAttributeDescription, 1> P3VertexAttributes;
 	extern const std::array<VkVertexInputAttributeDescription, 2> CP2VertexAttributes;
 	extern const std::array<VkVertexInputAttributeDescription, 4> PCTVertexAttributes;
 	const vertexDescriptions NullVertexDescriptions({ {}, nullptr, 0 });
@@ -48,6 +49,33 @@ struct P2Vertex {
 			getBindingDescription(),
 			constants::P2VertexAttributes.data(),
 			constants::P2VertexAttributes.size()
+			});
+	}
+};
+
+
+struct P3Vertex {
+	glm::vec3 pos;
+
+	static VkVertexInputBindingDescription getBindingDescription() {
+		// Binding Description tells the rate at which vertex data is coming in
+		VkVertexInputBindingDescription bindingDescription = {};
+		bindingDescription.binding = 0;								// Binding index of this binding in the binding array
+		bindingDescription.stride = sizeof(P3Vertex);					// Stride between each vertex data 
+		// � VK_VERTEX_INPUT_RATE_VERTEX : Move to the next data entry after each vertex
+		// � VK_VERTEX_INPUT_RATE_INSTANCE : Move to the next data entry after each instance
+		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		return bindingDescription;
+	}
+	bool operator==(const P3Vertex& other) const {
+		return pos == other.pos;
+	}
+
+	static vertexDescriptions getDescriptions() {
+		return vertexDescriptions({
+			getBindingDescription(),
+			constants::P3VertexAttributes.data(),
+			constants::P3VertexAttributes.size()
 			});
 	}
 };

@@ -278,7 +278,7 @@ public:
 		vk->createSwapChainImageViews(sc.images, sc.format, sc.imageViews);
 		// The render pass depends on the format of the swap chain. It is rare that the format changes but to be sure
 		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, true, false, true);
-		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vertShaderModule, fragShaderModule, P2Vertex::getDescriptions(), nullptr, VK_NULL_HANDLE, sc.extent, msaaSamples);
+		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,false, vertShaderModule, fragShaderModule, P2Vertex::getDescriptions(), nullptr, VK_NULL_HANDLE, sc.extent, msaaSamples);
 		frameBuffers = vk->createFramebuffers(renderPass, sc);
 		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(), true);
 		vk->createSyncObjects(syncObjects, sc.imageCount);

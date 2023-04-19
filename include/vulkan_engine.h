@@ -208,6 +208,8 @@ public:
 	// For creating the graphics pipeline
 	void createGraphicsPipeline(VkPipeline& graphicsPipeline, VkPipelineLayout& pipelineLayout,
 		VkRenderPass renderPass,
+		VkPrimitiveTopology topology,
+		bool primitiveRestart,
 		VkShaderModule vertShaderModule,
 		VkShaderModule fragShaderModule,
 		vertexDescriptions vertex,

@@ -1,108 +1,75 @@
 #include "vulkan_engine.h"
 #include "vulkan_vertices.h"
-#include "vulkan_descriptors.h"
-#include "glfwInteraction.h"
-#include "importResources.h"
 #include <chrono>
 #include <map>
 
-const int vertexCount = 12;
+#define INDICES_PRIMITIVE_RESTART  0xFFFFFFFF
+#define IPR INDICES_PRIMITIVE_RESTART
+
+const std::array<P3Vertex, 12> vertices = {{
+	{{  0.0f,  0.0f,  0.0f}}, // Palm Center
+	{{  0.0f,  0.8f,  0.0f}}, // Arm prev
+	{{  0.0f,  0.5f,  0.0f}}, // Arm next
+	{{ -0.1f,  0.3f,  0.0f}},  // Pinky: Metacarpal prev 
+	{{ -0.4f, -0.2f,  0.0f}},  // Prox prev
+	{{ -0.8f, -0.6f,  0.0f}},  // Inter prev
+	{{  0.2f,  0.3f,  0.0f}},  // Index: Metacarpal prev 
+	{{  0.4f, -0.2f,  0.0f}},  // Prox prev
+	{{  0.6f, -0.8f,  0.0f}},  // Inter prev
+	{{  0.6f,  0.3f,  0.0f}},  // Thumb: Metacarpal prev 
+	{{  0.8f,  0.1f,  0.0f}},  // Prox prev
+	{{  0.9f, -0.1f,  0.0f}}  // Inter prev
+} };
+
+const std::array<uint32_t, 14> indices = {
+	1,2,IPR,3,4,5,IPR,6,7,8,IPR,9,10,11
+};
 
 /*
-#version 450 core
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
 
-
-layout(push_constant) uniform uPushConstant { float time; } pc;
-
-vec2 circleDot(uint glIndex, float time){
-	float radius = 0.5;
-	// f(x) = -pi + index/indexCount * 2 * pi
-	float x = mod(-3.14 + float(glIndex)* 2*3.14/12 , 6.28);
-	float t =  x - sin(x-time)/(1+0.5*pow(x-time,2));
-
-	return vec2(radius * cos(t),radius * sin(t));
-}
+layout(location = 0) in vec3 inPosition;
 
 
 
-void main()
-{
-	gl_PointSize = 5.0;
-	gl_Position = vec4(circleDot(gl_VertexIndex,pc.time) , 0.0, 1.0);
+void main(){
+	gl_Position = vec4(inPosition,1.0);
 }
 */
 shaderCode32 vert = {
-0x07230203, 0x00010000, 0x000d000a, 0x00000058, 0x00000000, 0x00020011, 0x00000001, 0x0006000b,
+0x07230203, 0x00010000, 0x000d000a, 0x0000001f, 0x00000000, 0x00020011, 0x00000001, 0x0006000b,
 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e, 0x00000000, 0x0003000e, 0x00000000, 0x00000001,
-0x0007000f, 0x00000000, 0x00000004, 0x6e69616d, 0x00000000, 0x0000003e, 0x00000046, 0x00030003,
-0x00000002, 0x000001c2, 0x000a0004, 0x475f4c47, 0x4c474f4f, 0x70635f45, 0x74735f70, 0x5f656c79,
-0x656e696c, 0x7269645f, 0x69746365, 0x00006576, 0x00080004, 0x475f4c47, 0x4c474f4f, 0x6e695f45,
-0x64756c63, 0x69645f65, 0x74636572, 0x00657669, 0x00040005, 0x00000004, 0x6e69616d, 0x00000000,
-0x00070005, 0x0000000e, 0x63726963, 0x6f44656c, 0x31752874, 0x3b31663b, 0x00000000, 0x00040005,
-0x0000000c, 0x6e496c67, 0x00786564, 0x00040005, 0x0000000d, 0x656d6974, 0x00000000, 0x00040005,
-0x00000010, 0x69646172, 0x00007375, 0x00030005, 0x00000012, 0x00000078, 0x00030005, 0x0000001f,
-0x00000074, 0x00060005, 0x0000003c, 0x505f6c67, 0x65567265, 0x78657472, 0x00000000, 0x00060006,
-0x0000003c, 0x00000000, 0x505f6c67, 0x7469736f, 0x006e6f69, 0x00070006, 0x0000003c, 0x00000001,
-0x505f6c67, 0x746e696f, 0x657a6953, 0x00000000, 0x00070006, 0x0000003c, 0x00000002, 0x435f6c67,
-0x4470696c, 0x61747369, 0x0065636e, 0x00070006, 0x0000003c, 0x00000003, 0x435f6c67, 0x446c6c75,
-0x61747369, 0x0065636e, 0x00030005, 0x0000003e, 0x00000000, 0x00060005, 0x00000046, 0x565f6c67,
-0x65747265, 0x646e4978, 0x00007865, 0x00060005, 0x00000049, 0x73755075, 0x6e6f4368, 0x6e617473,
-0x00000074, 0x00050006, 0x00000049, 0x00000000, 0x656d6974, 0x00000000, 0x00030005, 0x0000004b,
-0x00006370, 0x00040005, 0x0000004c, 0x61726170, 0x0000006d, 0x00040005, 0x0000004d, 0x61726170,
-0x0000006d, 0x00050048, 0x0000003c, 0x00000000, 0x0000000b, 0x00000000, 0x00050048, 0x0000003c,
-0x00000001, 0x0000000b, 0x00000001, 0x00050048, 0x0000003c, 0x00000002, 0x0000000b, 0x00000003,
-0x00050048, 0x0000003c, 0x00000003, 0x0000000b, 0x00000004, 0x00030047, 0x0000003c, 0x00000002,
-0x00040047, 0x00000046, 0x0000000b, 0x0000002a, 0x00050048, 0x00000049, 0x00000000, 0x00000023,
-0x00000000, 0x00030047, 0x00000049, 0x00000002, 0x00020013, 0x00000002, 0x00030021, 0x00000003,
-0x00000002, 0x00040015, 0x00000006, 0x00000020, 0x00000000, 0x00040020, 0x00000007, 0x00000007,
-0x00000006, 0x00030016, 0x00000008, 0x00000020, 0x00040020, 0x00000009, 0x00000007, 0x00000008,
-0x00040017, 0x0000000a, 0x00000008, 0x00000002, 0x00050021, 0x0000000b, 0x0000000a, 0x00000007,
-0x00000009, 0x0004002b, 0x00000008, 0x00000011, 0x3f000000, 0x0004002b, 0x00000008, 0x00000013,
-0xc048f5c3, 0x0004002b, 0x00000008, 0x00000016, 0x40000000, 0x0004002b, 0x00000008, 0x00000018,
-0x4048f5c3, 0x0004002b, 0x00000008, 0x0000001a, 0x41400000, 0x0004002b, 0x00000008, 0x0000001d,
-0x40c8f5c3, 0x0004002b, 0x00000008, 0x00000025, 0x3f800000, 0x00040017, 0x00000039, 0x00000008,
-0x00000004, 0x0004002b, 0x00000006, 0x0000003a, 0x00000001, 0x0004001c, 0x0000003b, 0x00000008,
-0x0000003a, 0x0006001e, 0x0000003c, 0x00000039, 0x00000008, 0x0000003b, 0x0000003b, 0x00040020,
-0x0000003d, 0x00000003, 0x0000003c, 0x0004003b, 0x0000003d, 0x0000003e, 0x00000003, 0x00040015,
-0x0000003f, 0x00000020, 0x00000001, 0x0004002b, 0x0000003f, 0x00000040, 0x00000001, 0x0004002b,
-0x00000008, 0x00000041, 0x40a00000, 0x00040020, 0x00000042, 0x00000003, 0x00000008, 0x0004002b,
-0x0000003f, 0x00000044, 0x00000000, 0x00040020, 0x00000045, 0x00000001, 0x0000003f, 0x0004003b,
-0x00000045, 0x00000046, 0x00000001, 0x0003001e, 0x00000049, 0x00000008, 0x00040020, 0x0000004a,
-0x00000009, 0x00000049, 0x0004003b, 0x0000004a, 0x0000004b, 0x00000009, 0x00040020, 0x0000004e,
-0x00000009, 0x00000008, 0x0004002b, 0x00000008, 0x00000052, 0x00000000, 0x00040020, 0x00000056,
-0x00000003, 0x00000039, 0x00050036, 0x00000002, 0x00000004, 0x00000000, 0x00000003, 0x000200f8,
-0x00000005, 0x0004003b, 0x00000007, 0x0000004c, 0x00000007, 0x0004003b, 0x00000009, 0x0000004d,
-0x00000007, 0x00050041, 0x00000042, 0x00000043, 0x0000003e, 0x00000040, 0x0003003e, 0x00000043,
-0x00000041, 0x0004003d, 0x0000003f, 0x00000047, 0x00000046, 0x0004007c, 0x00000006, 0x00000048,
-0x00000047, 0x0003003e, 0x0000004c, 0x00000048, 0x00050041, 0x0000004e, 0x0000004f, 0x0000004b,
-0x00000044, 0x0004003d, 0x00000008, 0x00000050, 0x0000004f, 0x0003003e, 0x0000004d, 0x00000050,
-0x00060039, 0x0000000a, 0x00000051, 0x0000000e, 0x0000004c, 0x0000004d, 0x00050051, 0x00000008,
-0x00000053, 0x00000051, 0x00000000, 0x00050051, 0x00000008, 0x00000054, 0x00000051, 0x00000001,
-0x00070050, 0x00000039, 0x00000055, 0x00000053, 0x00000054, 0x00000052, 0x00000025, 0x00050041,
-0x00000056, 0x00000057, 0x0000003e, 0x00000044, 0x0003003e, 0x00000057, 0x00000055, 0x000100fd,
-0x00010038, 0x00050036, 0x0000000a, 0x0000000e, 0x00000000, 0x0000000b, 0x00030037, 0x00000007,
-0x0000000c, 0x00030037, 0x00000009, 0x0000000d, 0x000200f8, 0x0000000f, 0x0004003b, 0x00000009,
-0x00000010, 0x00000007, 0x0004003b, 0x00000009, 0x00000012, 0x00000007, 0x0004003b, 0x00000009,
-0x0000001f, 0x00000007, 0x0003003e, 0x00000010, 0x00000011, 0x0004003d, 0x00000006, 0x00000014,
-0x0000000c, 0x00040070, 0x00000008, 0x00000015, 0x00000014, 0x00050085, 0x00000008, 0x00000017,
-0x00000015, 0x00000016, 0x00050085, 0x00000008, 0x00000019, 0x00000017, 0x00000018, 0x00050088,
-0x00000008, 0x0000001b, 0x00000019, 0x0000001a, 0x00050081, 0x00000008, 0x0000001c, 0x00000013,
-0x0000001b, 0x0005008d, 0x00000008, 0x0000001e, 0x0000001c, 0x0000001d, 0x0003003e, 0x00000012,
-0x0000001e, 0x0004003d, 0x00000008, 0x00000020, 0x00000012, 0x0004003d, 0x00000008, 0x00000021,
-0x00000012, 0x0004003d, 0x00000008, 0x00000022, 0x0000000d, 0x00050083, 0x00000008, 0x00000023,
-0x00000021, 0x00000022, 0x0006000c, 0x00000008, 0x00000024, 0x00000001, 0x0000000d, 0x00000023,
-0x0004003d, 0x00000008, 0x00000026, 0x00000012, 0x0004003d, 0x00000008, 0x00000027, 0x0000000d,
-0x00050083, 0x00000008, 0x00000028, 0x00000026, 0x00000027, 0x0007000c, 0x00000008, 0x00000029,
-0x00000001, 0x0000001a, 0x00000028, 0x00000016, 0x00050085, 0x00000008, 0x0000002a, 0x00000011,
-0x00000029, 0x00050081, 0x00000008, 0x0000002b, 0x00000025, 0x0000002a, 0x00050088, 0x00000008,
-0x0000002c, 0x00000024, 0x0000002b, 0x00050083, 0x00000008, 0x0000002d, 0x00000020, 0x0000002c,
-0x0003003e, 0x0000001f, 0x0000002d, 0x0004003d, 0x00000008, 0x0000002e, 0x00000010, 0x0004003d,
-0x00000008, 0x0000002f, 0x0000001f, 0x0006000c, 0x00000008, 0x00000030, 0x00000001, 0x0000000e,
-0x0000002f, 0x00050085, 0x00000008, 0x00000031, 0x0000002e, 0x00000030, 0x0004003d, 0x00000008,
-0x00000032, 0x00000010, 0x0004003d, 0x00000008, 0x00000033, 0x0000001f, 0x0006000c, 0x00000008,
-0x00000034, 0x00000001, 0x0000000d, 0x00000033, 0x00050085, 0x00000008, 0x00000035, 0x00000032,
-0x00000034, 0x00050050, 0x0000000a, 0x00000036, 0x00000031, 0x00000035, 0x000200fe, 0x00000036,
-0x00010038
+0x0007000f, 0x00000000, 0x00000004, 0x6e69616d, 0x00000000, 0x0000000d, 0x00000016, 0x00030003,
+0x00000002, 0x000001c2, 0x00090004, 0x415f4c47, 0x735f4252, 0x72617065, 0x5f657461, 0x64616873,
+0x6f5f7265, 0x63656a62, 0x00007374, 0x000a0004, 0x475f4c47, 0x4c474f4f, 0x70635f45, 0x74735f70,
+0x5f656c79, 0x656e696c, 0x7269645f, 0x69746365, 0x00006576, 0x00080004, 0x475f4c47, 0x4c474f4f,
+0x6e695f45, 0x64756c63, 0x69645f65, 0x74636572, 0x00657669, 0x00040005, 0x00000004, 0x6e69616d,
+0x00000000, 0x00060005, 0x0000000b, 0x505f6c67, 0x65567265, 0x78657472, 0x00000000, 0x00060006,
+0x0000000b, 0x00000000, 0x505f6c67, 0x7469736f, 0x006e6f69, 0x00070006, 0x0000000b, 0x00000001,
+0x505f6c67, 0x746e696f, 0x657a6953, 0x00000000, 0x00070006, 0x0000000b, 0x00000002, 0x435f6c67,
+0x4470696c, 0x61747369, 0x0065636e, 0x00070006, 0x0000000b, 0x00000003, 0x435f6c67, 0x446c6c75,
+0x61747369, 0x0065636e, 0x00030005, 0x0000000d, 0x00000000, 0x00050005, 0x00000016, 0x6f506e69,
+0x69746973, 0x00006e6f, 0x00050048, 0x0000000b, 0x00000000, 0x0000000b, 0x00000000, 0x00050048,
+0x0000000b, 0x00000001, 0x0000000b, 0x00000001, 0x00050048, 0x0000000b, 0x00000002, 0x0000000b,
+0x00000003, 0x00050048, 0x0000000b, 0x00000003, 0x0000000b, 0x00000004, 0x00030047, 0x0000000b,
+0x00000002, 0x00040047, 0x00000016, 0x0000001e, 0x00000000, 0x00020013, 0x00000002, 0x00030021,
+0x00000003, 0x00000002, 0x00030016, 0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006,
+0x00000004, 0x00040015, 0x00000008, 0x00000020, 0x00000000, 0x0004002b, 0x00000008, 0x00000009,
+0x00000001, 0x0004001c, 0x0000000a, 0x00000006, 0x00000009, 0x0006001e, 0x0000000b, 0x00000007,
+0x00000006, 0x0000000a, 0x0000000a, 0x00040020, 0x0000000c, 0x00000003, 0x0000000b, 0x0004003b,
+0x0000000c, 0x0000000d, 0x00000003, 0x00040015, 0x0000000e, 0x00000020, 0x00000001, 0x0004002b,
+0x0000000e, 0x0000000f, 0x00000001, 0x0004002b, 0x00000006, 0x00000010, 0x40a00000, 0x00040020,
+0x00000011, 0x00000003, 0x00000006, 0x0004002b, 0x0000000e, 0x00000013, 0x00000000, 0x00040017,
+0x00000014, 0x00000006, 0x00000003, 0x00040020, 0x00000015, 0x00000001, 0x00000014, 0x0004003b,
+0x00000015, 0x00000016, 0x00000001, 0x0004002b, 0x00000006, 0x00000018, 0x3f800000, 0x00040020,
+0x0000001d, 0x00000003, 0x00000007, 0x00050036, 0x00000002, 0x00000004, 0x00000000, 0x00000003,
+0x000200f8, 0x00000005, 0x00050041, 0x00000011, 0x00000012, 0x0000000d, 0x0000000f, 0x0003003e,
+0x00000012, 0x00000010, 0x0004003d, 0x00000014, 0x00000017, 0x00000016, 0x00050051, 0x00000006,
+0x00000019, 0x00000017, 0x00000000, 0x00050051, 0x00000006, 0x0000001a, 0x00000017, 0x00000001,
+0x00050051, 0x00000006, 0x0000001b, 0x00000017, 0x00000002, 0x00070050, 0x00000007, 0x0000001c,
+0x00000019, 0x0000001a, 0x0000001b, 0x00000018, 0x00050041, 0x0000001d, 0x0000001e, 0x0000000d,
+0x00000013, 0x0003003e, 0x0000001e, 0x0000001c, 0x000100fd, 0x00010038
 };
 /*
 #version 450
@@ -116,16 +83,17 @@ shaderCode32 frag = {
 0x07230203, 0x00010000, 0x000d000a, 0x0000000c, 0x00000000, 0x00020011, 0x00000001, 0x0006000b,
 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e, 0x00000000, 0x0003000e, 0x00000000, 0x00000001,
 0x0006000f, 0x00000004, 0x00000004, 0x6e69616d, 0x00000000, 0x00000009, 0x00030010, 0x00000004,
-0x00000007, 0x00030003, 0x00000002, 0x000001c2, 0x000a0004, 0x475f4c47, 0x4c474f4f, 0x70635f45,
-0x74735f70, 0x5f656c79, 0x656e696c, 0x7269645f, 0x69746365, 0x00006576, 0x00080004, 0x475f4c47,
-0x4c474f4f, 0x6e695f45, 0x64756c63, 0x69645f65, 0x74636572, 0x00657669, 0x00040005, 0x00000004,
-0x6e69616d, 0x00000000, 0x00050005, 0x00000009, 0x4374756f, 0x726f6c6f, 0x00000000, 0x00040047,
-0x00000009, 0x0000001e, 0x00000000, 0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002,
-0x00030016, 0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006, 0x00000004, 0x00040020,
-0x00000008, 0x00000003, 0x00000007, 0x0004003b, 0x00000008, 0x00000009, 0x00000003, 0x0004002b,
-0x00000006, 0x0000000a, 0x3f800000, 0x0007002c, 0x00000007, 0x0000000b, 0x0000000a, 0x0000000a,
-0x0000000a, 0x0000000a, 0x00050036, 0x00000002, 0x00000004, 0x00000000, 0x00000003, 0x000200f8,
-0x00000005, 0x0003003e, 0x00000009, 0x0000000b, 0x000100fd, 0x00010038
+0x00000007, 0x00030003, 0x00000002, 0x000001c2, 0x00090004, 0x415f4c47, 0x735f4252, 0x72617065,
+0x5f657461, 0x64616873, 0x6f5f7265, 0x63656a62, 0x00007374, 0x000a0004, 0x475f4c47, 0x4c474f4f,
+0x70635f45, 0x74735f70, 0x5f656c79, 0x656e696c, 0x7269645f, 0x69746365, 0x00006576, 0x00080004,
+0x475f4c47, 0x4c474f4f, 0x6e695f45, 0x64756c63, 0x69645f65, 0x74636572, 0x00657669, 0x00040005,
+0x00000004, 0x6e69616d, 0x00000000, 0x00050005, 0x00000009, 0x4374756f, 0x726f6c6f, 0x00000000,
+0x00040047, 0x00000009, 0x0000001e, 0x00000000, 0x00020013, 0x00000002, 0x00030021, 0x00000003,
+0x00000002, 0x00030016, 0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006, 0x00000004,
+0x00040020, 0x00000008, 0x00000003, 0x00000007, 0x0004003b, 0x00000008, 0x00000009, 0x00000003,
+0x0004002b, 0x00000006, 0x0000000a, 0x3f800000, 0x0007002c, 0x00000007, 0x0000000b, 0x0000000a,
+0x0000000a, 0x0000000a, 0x0000000a, 0x00050036, 0x00000002, 0x00000004, 0x00000000, 0x00000003,
+0x000200f8, 0x00000005, 0x0003003e, 0x00000009, 0x0000000b, 0x000100fd, 0x00010038
 };
 
 
@@ -146,7 +114,7 @@ private:
 	VkE_Buffer indexBuffer;
 	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
-	std::vector<VkE_Buffer> uniformBuffers = {{}};
+	std::vector<VkE_Buffer> uniformBuffers = { {} };
 	std::vector<VkDescriptorSet> descriptorSets;
 	float t_value = 0.0f;
 	VkPipelineLayout linesPipelineLayout = VK_NULL_HANDLE;
@@ -158,7 +126,7 @@ private:
 	void initVulkan() {
 		vk->createInstance();
 		vk->setupDebugMessenger();
-		vk->createSurface(window,surface);
+		vk->createSurface(window, surface);
 		vk->pickPhysicalDevice(surface);
 		vk->createLogicalDevice();
 		VulkanBackEndData vkbd = vk->getBackEndData();
@@ -178,12 +146,12 @@ private:
 		}
 		vk->setTransientCommandPool(transientCommandPool);
 
-		//vk->createVertexBuffer(vertices.data(), vertices.size() * sizeof(vertices[0]), vertexBuffer);
-		//vk->createIndexBuffer(indices.data(), indices.size() * sizeof(indices[0]), indexBuffer);
-		//indexCount = static_cast<uint32_t>(indices.size());
+		vk->createVertexBuffer((void*)vertices.data(), vertices.size() * sizeof(vertices[0]), vertexBuffer);
+		vk->createIndexBuffer((void*)indices.data(), indices.size() * sizeof(indices[0]), indexBuffer);
+		indexCount = static_cast<uint32_t>(indices.size());
 
 		// Window Rendering objects
-		createDescriptorSetLayout();
+		//createDescriptorSetLayout();
 		createSwapChainObjects();
 	}
 
@@ -262,16 +230,15 @@ private:
 		vk->createSwapChain(surface, sc, extent);
 		vk->createSwapChainImageViews(sc);
 		vk->createRenderPass(renderPass, sc.format, msaaSamples, true, true, false, true);
-		std::vector<VkPushConstantRange> push(1, { VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(float) });
 		vk->createGraphicsPipeline(pipeline,
 			pipelineLayout,
 			renderPass,
 			VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
 			false,
 			vertShader, fragShader,
-			constants::NullVertexDescriptions,
-			&push,
-			descriptorSetLayout,
+			P3Vertex::getDescriptions(),
+			nullptr,
+			VK_NULL_HANDLE,
 			sc.extent,
 			msaaSamples
 		);
@@ -279,21 +246,24 @@ private:
 			linesPipelineLayout,
 			renderPass,
 			VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
-			false,
+			true,
 			vertShader, fragShader,
-			constants::NullVertexDescriptions,
-			&push,
+			P3Vertex::getDescriptions(),
+			nullptr,
 			VK_NULL_HANDLE,
 			sc.extent,
 			msaaSamples
 		);
 		frameBuffers = vk->createFramebuffers(renderPass, sc, nullptr, depthImage.view);
 		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(), true);
-		vk->createDescriptorPool(descriptorPool, sc.imageCount, sc.imageCount, sc.imageCount);
-		createUniformBuffers();
-		createDescriptorSets();
-		updateDescriptorSet();
+		//vk->createDescriptorPool(descriptorPool, sc.imageCount, sc.imageCount, sc.imageCount);
+		//createUniformBuffers();
+		//createDescriptorSets();
+		//updateDescriptorSet();
 		vk->createSyncObjects(syncObjects, sc.imageCount);
+		for (int i = 0; i < commandBuffers.size(); i++) {
+			writeCommandBuffer(commandBuffers[i], frameBuffers[i]);
+		}
 	}
 
 
@@ -318,24 +288,25 @@ private:
 		}
 		vkDestroySwapchainKHR(vk->device, sc.swapChain, nullptr);
 
-		for (size_t i = 0; i < uniformBuffers.size(); i++) {
-			vk->destroyBufferBundle(uniformBuffers[i]);
-		}
+		//for (size_t i = 0; i < uniformBuffers.size(); i++) {
+		//	vk->destroyBufferBundle(uniformBuffers[i]);
+		//}
 
-		vkDestroyDescriptorPool(vk->device, descriptorPool, nullptr);
+		//vkDestroyDescriptorPool(vk->device, descriptorPool, nullptr);
 
 	}
 
 	void cleanup() {
 		cleanupSwapChain();
 
+		vk->destroyBufferBundle(vertexBuffer);
+		vk->destroyBufferBundle(indexBuffer);
 		if (vertShader != VK_NULL_HANDLE) { vkDestroyShaderModule(vk->device, vertShader, nullptr); vertShader = VK_NULL_HANDLE; }
 		if (fragShader != VK_NULL_HANDLE) { vkDestroyShaderModule(vk->device, fragShader, nullptr); fragShader = VK_NULL_HANDLE; }
 		// Here there is a choice for the Allocator function
-		vkDestroyDescriptorSetLayout(vk->device, descriptorSetLayout, nullptr);
+		//vkDestroyDescriptorSetLayout(vk->device, descriptorSetLayout, nullptr);
 		// Here there is a choice for the Allocator function
-		vk->destroyBufferBundle(vertexBuffer);
-		vk->destroyBufferBundle(indexBuffer);
+
 
 
 		// Here there is a choice for the Allocator function
@@ -370,7 +341,7 @@ private:
 		vkDeviceWaitIdle(vk->device);
 
 		cleanupSwapChain();
-		
+
 		createSwapChainObjects();
 	}
 
@@ -396,11 +367,10 @@ private:
 		// Mark the image as now being in use by this frame
 		syncObjects.imagesInFlight[imageIndex] = syncObjects.inFlightFences[inFlightFrameIndex];
 
-		writeCommandBuffer(commandBuffers[imageIndex],frameBuffers[imageIndex],t_value);
 
 		std::vector<VkCommandBuffer> submitCommmandBuffers = { commandBuffers[imageIndex] };
 		VkResult err;
-	
+
 
 		VkSubmitInfo submitInfo = {};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -440,7 +410,7 @@ private:
 		presentInfo.pImageIndices = &imageIndex;
 		presentInfo.pResults = nullptr; // Optional
 
-		
+
 		VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
@@ -454,7 +424,7 @@ private:
 		inFlightFrameIndex = (inFlightFrameIndex + 1) % MAX_FRAME_IN_FLIGHT;
 	}
 
-	void writeCommandBuffer(VkCommandBuffer cmd, VkFramebuffer frmBuffer, float time) {
+	void writeCommandBuffer(VkCommandBuffer cmd, VkFramebuffer frmBuffer) {
 		vkResetCommandBuffer(cmd, 0);
 
 		VkCommandBufferBeginInfo beginInfo = {};
@@ -482,19 +452,22 @@ private:
 
 
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-		//upload the matrix to the GPU via push constants
-		vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float), &time);
-		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[0], 0, nullptr);
+
+		VkBuffer vertexBuffers[] = { vertexBuffer.buffer };
+		VkDeviceSize offsets[] = { 0 };
+		vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
 
 		// Draw Vertex
-		vkCmdDraw(cmd, vertexCount, 1, 0, 0);
+		vkCmdDraw(cmd, vertices.size(),1,0, 0);
 
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, linesPipeline);
 		//upload the matrix to the GPU via push constants
-		vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float), &time);
+		//vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float), &time);
+		// We can only have a single index buffer.
+		vkCmdBindIndexBuffer(cmd, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
 		// Draw Vertex
-		vkCmdDraw(cmd, vertexCount, 1, 0, 0);
+		vkCmdDrawIndexed(cmd, indices.size(), 1, 0, 0, 0);
 
 
 		vkCmdEndRenderPass(cmd);
@@ -521,7 +494,7 @@ private:
 			auto currentTime = std::chrono::high_resolution_clock::now();
 			t_value = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
 			int r = (int)(t_value / (6.28));
-			t_value = t_value - (float)(r)*6.28;
+			t_value = t_value - (float)(r) * 6.28;
 		}
 
 		vkDeviceWaitIdle(vk->device);

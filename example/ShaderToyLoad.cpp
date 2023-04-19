@@ -50,7 +50,7 @@ class ShaderToyApplication :protected VulkanWindow {
 	using VulkanWindow::VulkanWindow;
 public:
 	void run() {
-		initWindow(width, height, true, this, framebufferResizeCallback, nullptr);
+		initWindow("ShaderToy",width, height, true, this, framebufferResizeCallback, nullptr);
 		initVulkan();
 		mainLoop();
 		cleanup();
@@ -104,7 +104,15 @@ private:
 		vk->createSwapChainImageViews(sc);
 		vk->createRenderPass(renderPass,sc.format, VK_SAMPLE_COUNT_1_BIT, true, true,false,true);
 		std::vector<VkPushConstantRange> push(1, { VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(PushConstants) });
-		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass, vert, frag, constants::NullVertexDescriptions, &push, VK_NULL_HANDLE, sc.extent, VK_SAMPLE_COUNT_1_BIT);
+		vk->createGraphicsPipeline(pipeline, pipelineLayout, 
+			renderPass,
+			VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			false,
+			vert, frag, 
+			constants::NullVertexDescriptions, 
+			&push, VK_NULL_HANDLE, 
+			sc.extent, 
+			VK_SAMPLE_COUNT_1_BIT);
 		frameBuffers = vk->createFramebuffers(renderPass,sc);
 		commandBuffers = vk->createCommandBuffers(commandPool, frameBuffers.size(),true);
 		vk->createSyncObjects(syncObjects, sc.imageCount);

@@ -827,6 +827,8 @@ void VulkanEngine::createGraphicsPipeline(
 	VkPipeline& graphicsPipeline,
 	VkPipelineLayout& pipelineLayout,
 	VkRenderPass renderPass, 
+	VkPrimitiveTopology topology,
+	bool primitiveRestart,
 	VkShaderModule vertShaderModule,
 	VkShaderModule fragShaderModule,
 	vertexDescriptions vertex,
@@ -896,8 +898,8 @@ void VulkanEngine::createGraphicsPipeline(
 	//		VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : triangle from every 3 vertices without reuse
 	//		VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : the second and third vertex of every triangle are used as first two
 	//	vertices of the next triangle
-	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	inputAssembly.primitiveRestartEnable = VK_FALSE;
+	inputAssembly.topology = topology;
+	inputAssembly.primitiveRestartEnable = primitiveRestart;
 
 	// Viewports
 	// A viewport basically describes the region of the framebuffer that the output will

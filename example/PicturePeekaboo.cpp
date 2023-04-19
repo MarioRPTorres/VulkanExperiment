@@ -120,6 +120,7 @@ shaderCode32 vert = {
 0x0000002d, 0x00050083, 0x00000006, 0x00000048, 0x00000045, 0x00000047, 0x00050050, 0x00000007,
 0x00000049, 0x0000002f, 0x00000048, 0x000200fe, 0x00000049, 0x00010038
 };
+
 /*
 #version 450
 layout(binding = 0) uniform sampler2D texSampler;
@@ -135,6 +136,7 @@ void main() {
 	outColor = texture(texSampler,uv);
 }
 */
+
 shaderCode32 frag = {
 0x07230203, 0x00010000, 0x000d000a, 0x00000024, 0x00000000, 0x00020011, 0x00000001, 0x0006000b,
 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e, 0x00000000, 0x0003000e, 0x00000000, 0x00000001,
@@ -264,18 +266,6 @@ private:
 		}
 	}
 
-	void updateUniformBuffer(VkE_Buffer buffer) {
-		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
-		glm::vec2 windowSize = { width,height };
-		VkDeviceSize bufferSize = sizeof(windowSize);
-
-		void* data;
-		vkMapMemory(vk->device, buffer.memory, 0, bufferSize, 0, &data);
-		memcpy(data, &windowSize, bufferSize);
-		vkUnmapMemory(vk->device, buffer.memory);
-	}
-
 	void createUniformBuffers() {
 		VkDeviceSize bufferSize = sizeof(glm::vec2);
 
@@ -286,6 +276,18 @@ private:
 			updateUniformBuffer(uniformBuffers[i]);
 		}
 
+	}
+
+	void updateUniformBuffer(VkE_Buffer buffer) {
+		int width, height;
+		glfwGetFramebufferSize(window, &width, &height);
+		glm::vec2 windowSize = { width,height };
+		VkDeviceSize bufferSize = sizeof(windowSize);
+
+		void* data;
+		vkMapMemory(vk->device, buffer.memory, 0, bufferSize, 0, &data);
+		memcpy(data, &windowSize, bufferSize);
+		vkUnmapMemory(vk->device, buffer.memory);
 	}
 
 	void createDescriptorSets() {
@@ -301,7 +303,6 @@ private:
 		if (vkAllocateDescriptorSets(vk->device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
 			throw std::runtime_error("failed to allocate descriptor sets!");
 		}
-		
 	}
 
 	void writeDescriptorSets() {
@@ -518,6 +519,8 @@ private:
 		vk->createGraphicsPipeline(pipeline,
 			pipelineLayout,
 			renderPass,
+			VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			false,
 			vertexShader, fragmentShader,
 			constants::NullVertexDescriptions,
 			&push,

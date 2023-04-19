@@ -246,6 +246,8 @@ private:
 			sc.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
 			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
 		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass,
+			VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			false,
 			vert, frag,
 			PCTVertex::getDescriptions(), nullptr, descriptorSetLayout,
 			sc.extent,

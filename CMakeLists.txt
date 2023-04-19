@@ -7,6 +7,7 @@ set(BUILD_SHADERTOY_EXAMPLE TRUE)
 set(BUILD_POINTSDRAWING_EXAMPLE TRUE)
 set(BUILD_MULTIPLEWINDOWS_EXAMPLE TRUE)
 set(BUILD_PICTUREPEEKABOO_EXAMPLE TRUE)
+set(BUILD_DEEPLEAP_EXAMPLE TRUE)
  
 # Set Target Name
 set(PROJECT_TARGET VulkanEngine)
@@ -270,6 +271,14 @@ if (BUILD_PICTUREPEEKABOO_EXAMPLE)
 	    example/PicturePeekaboo.cpp
     )
     CONFIGUREEXAMPLETARGET(PicturePeekaboo TRUE FALSE)
+endif()
+
+if (BUILD_DEEPLEAP_EXAMPLE)
+    # Create the Vulkan Tutorial application target using the main.cpp example 
+    add_executable( DeepLeap 
+	    example/DeepLeap.cpp
+    )
+    CONFIGUREEXAMPLETARGET(DeepLeap TRUE TRUE)
 endif()
 
 if (BUILD_EXTRA_EXAMPLES)
