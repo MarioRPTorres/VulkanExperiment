@@ -1294,25 +1294,37 @@ VkFormat VulkanEngine::findDepthFormat() {
 	);
 }
 
-void VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage, VkE_Buffer& buffer) {
+void VulkanEngine::createBufferWithData(void* data, VkDeviceSize bufferSize, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkE_Buffer& buffer) {
 
-	// Create a host visible buffer
-	VkE_Buffer stagingBuffer;
-	createBuffer(bufferSize,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		stagingBuffer.buffer,
-		stagingBuffer.memory);
+	if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+		// If memory buffer should be visible for host then there is no need for a staging buffer
+		createBuffer(bufferSize,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			properties | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			buffer.buffer,
+			buffer.memory);
 
-	mapBufferMemory(stagingBuffer.memory, data, bufferSize);
+		mapBufferMemory(buffer.memory, data, bufferSize);
+	}
+	else {
+		// Create a host visible buffer
+		VkE_Buffer stagingBuffer;
+		createBuffer(bufferSize,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			stagingBuffer.buffer,
+			stagingBuffer.memory);
 
-	createBuffer(bufferSize,
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer.buffer,
-		buffer.memory);
-	copyBuffer(stagingBuffer.buffer, buffer.buffer, bufferSize);
+		mapBufferMemory(stagingBuffer.memory, data, bufferSize);
 
-	destroyBufferBundle(stagingBuffer);
+		createBuffer(bufferSize,
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
+			properties, buffer.buffer,
+			buffer.memory);
+		copyBuffer(stagingBuffer.buffer, buffer.buffer, bufferSize);
+
+		destroyBufferBundle(stagingBuffer);
+	}
 }
 
 void VulkanEngine::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,

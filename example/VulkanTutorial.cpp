@@ -21,8 +21,8 @@ const bool enableImgui = true;
 const bool enableImgui = false;
 #endif
 
-const bool enableMultiSampling = false;
-const bool enableDepthTest = false;
+const bool enableMultiSampling = true;
+const bool enableDepthTest = true;
 
 #define QUDI(x) #x
 #define STRING(x) QUDI(x)

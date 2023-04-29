@@ -181,7 +181,7 @@ private:
 		glm::vec2 windowSize = { width,height };
 		VkDeviceSize bufferSize = sizeof(windowSize);
 		for (size_t i = 0; i < uniformBuffers.size(); i++) {
-			vk->createBufferWithData(&windowSize, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, uniformBuffers[i]);
+			vk->createBufferWithData(&windowSize, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, uniformBuffers[i]);
 		}
 	}
 

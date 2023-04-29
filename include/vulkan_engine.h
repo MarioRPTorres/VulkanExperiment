@@ -249,12 +249,12 @@ public:
 	void destroyBufferBundle(VkE_Buffer buffer);
 	void mapBufferMemory(VkDeviceMemory bufferMemory, void* data, VkDeviceSize datalen);
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-	void createBufferWithData(void* data, VkDeviceSize bufferSize, VkFlags usage, VkE_Buffer& buffer);
+	void createBufferWithData(void* data, VkDeviceSize bufferSize, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkE_Buffer& buffer);
 	inline void createVertexBuffer(void* data, VkDeviceSize bufferSize, VkE_Buffer& vertexBuffer) {
-		createBufferWithData(data, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertexBuffer);
+		createBufferWithData(data, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer);
 	};
 	inline void createIndexBuffer(void* data, VkDeviceSize bufferSize, VkE_Buffer& indexBuffer) {
-		createBufferWithData(data, bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indexBuffer);
+		createBufferWithData(data, bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer);
 	};
 
 	// Command Buffers
