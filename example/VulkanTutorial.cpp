@@ -42,7 +42,6 @@ Future Feature:
 const int WIDTH = 640;
 const int HEIGHT = 480;
 
-extern float cameraEye[3];
 
 // Number of parallel descriptor sets to switch between
 const int MIRROR_DESCRIPTOR_SET_COUNT = 2;
@@ -63,6 +62,9 @@ void compileShaders() {
 	system((vulkan_glslc_path + " ./shaders/shader.vert -o ./vert.spv").c_str());
 
 	system((vulkan_glslc_path + " ./shaders/shader.frag -o ./frag.spv").c_str());
+
+	system((vulkan_glslc_path + " ./shaders/infiniteGrid.vert -o ./gridvert.spv").c_str());
+	system((vulkan_glslc_path + " ./shaders/infiniteGrid.frag -o ./gridfrag.spv").c_str());
 }
 
 namespace std {
@@ -154,7 +156,7 @@ class HelloTriangleApplication:protected VulkanWindow {
 public:
 	void run() {
 		mipLevels = 3;
-		initWindow("VulkanTutorial", WIDTH, HEIGHT, true, this, framebufferResizeCallback, key_callback);
+		initWindow("VulkanTutorial", WIDTH, HEIGHT, true, this, framebufferResizeCallback, moveCameraCallBack);
 		glfwGetFramebufferSize(window, &width, &height);
 		initVulkan();
 		if (enableImgui) {
@@ -164,6 +166,9 @@ public:
 		mainLoop();
 		cleanup();
 	}
+
+	CameraEyeLookAt cam;
+	std::vector<bool> camChanged = {};
 private:
 	VkShaderModule vert;
 	VkShaderModule frag;
@@ -174,16 +179,29 @@ private:
 	std::array<VkE_Image, MAX_SAMPLED_IMAGES> updatedTextureImages;
 	uint32_t mipLevels;
 	VkCommandPool transientCommandPool = VK_NULL_HANDLE;
+	VkPipeline gridPipeline = VK_NULL_HANDLE;
+	VkPipelineLayout gridPipelineLayout = VK_NULL_HANDLE;
+	VkShaderModule gridVert = VK_NULL_HANDLE;
+	VkShaderModule gridFrag = VK_NULL_HANDLE;
 
 	bool firstSwapChain = true;
 
 	VkDescriptorPool descriptorPool;
+
 	VkDescriptorSetLayout descriptorSetLayout;
+
 	std::array<std::vector<VkDescriptorSet>, MIRROR_DESCRIPTOR_SET_COUNT> descriptorSets;
 	int descriptorGroup = 0;
 
 	VkEImgui_Backend imGuiBackEnd;
 	bool imguiInfo =  false;
+
+
+	static void moveCameraCallBack(GLFWwindow* window, int key, int scancode, int action, int mods) {
+		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+		if( app->cam.keyCallbackMoveCameraEye(key, scancode, action, mods) )
+			std::fill(app->camChanged.begin(), app->camChanged.end(), true);
+	}
 
 	void initVulkan() {
 		vk->createInstance();
@@ -205,6 +223,10 @@ private:
 		char2shaderCode(readFile("./frag.spv"), fragShaderCode);
 		vert = vk->createShaderModule(vertShaderCode);
 		frag = vk->createShaderModule(fragShaderCode);
+		char2shaderCode(readFile("./gridvert.spv"), vertShaderCode);
+		char2shaderCode(readFile("./gridfrag.spv"), fragShaderCode);
+		gridVert = vk->createShaderModule(vertShaderCode);
+		gridFrag = vk->createShaderModule(fragShaderCode);
 
 		vk->createCommandPool(commandPool,vkbd.graphicsQueueFamily,0);
 		// If transfer family and graphics family are the same use the same command pool
@@ -245,6 +267,13 @@ private:
 			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT,
 			sc.imageCount * MAX_SAMPLED_IMAGES * MIRROR_DESCRIPTOR_SET_COUNT,
 			sc.imageCount * MIRROR_DESCRIPTOR_SET_COUNT);
+		vk->createGraphicsPipeline(gridPipeline, gridPipelineLayout, renderPass,
+			VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			false,
+			gridVert, gridFrag,
+			constants::NullVertexDescriptions, nullptr, descriptorSetLayout,
+			sc.extent,
+			msaaSamples);
 		vk->createGraphicsPipeline(pipeline, pipelineLayout, renderPass,
 			VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
 			false,
@@ -281,6 +310,9 @@ private:
 		}
 		vkFreeCommandBuffers(vk->device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 
+		vkDestroyPipeline(vk->device, gridPipeline, nullptr);
+		vkDestroyPipelineLayout(vk->device, gridPipelineLayout, nullptr);
+
 		vkDestroyPipeline(vk->device, pipeline, nullptr);
 		vkDestroyPipelineLayout(vk->device, pipelineLayout, nullptr);
 		vkDestroyRenderPass(vk->device, renderPass, nullptr);
@@ -314,6 +346,8 @@ private:
 
 		vkDestroyShaderModule(vk->device, vert, nullptr);
 		vkDestroyShaderModule(vk->device, frag, nullptr);
+		vkDestroyShaderModule(vk->device, gridVert, nullptr);
+		vkDestroyShaderModule(vk->device, gridFrag, nullptr);
 
 		vk->cleanupSampledImage(textureImages[0]);
 		vk->cleanupSampledImage(textureImages[1]);
@@ -362,37 +396,49 @@ private:
 		VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
 		uniformBuffers.resize(sc.imageCount);
+		camChanged.resize(sc.imageCount, false);
 
 		for (size_t i = 0; i < sc.imageCount; i++) {
 			vk->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i].buffer,
 				uniformBuffers[i].memory);
+			writeUniformBuffer(i);
 		}
 	}
 
-	void updateUniformBuffer(uint32_t currentImage) {
-		auto startTime = std::chrono::high_resolution_clock::now();
-		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
+	void writeUniformBuffer(uint32_t currentImage) {
 		UniformBufferObject ubo = {};
-		//ubo.model = glm::translate(glm::rotate(glm::mat4(1.0f), time*glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),glm::vec3(1.0f,1.0f,0.0f));
-		//ubo.model = glm::translate(glm::mat4(0.0f), glm::vec3(1.0f, 1.0f, 0.0f));
-		//ubo.model = glm::rotate(glm::mat4(1.0f), time*glm::radians(90.0f), glm::vec3(0.0f, 0.0f,1.0f));
-		ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		//ubo.model = glm::mat4(1.0f);
-		//ubo.model[3][0] = 1.0f;
-		//ubo.model[3][1] = 1.0f;
-		//ubo.model[3][2] = 0.0f;
-		ubo.view = glm::lookAt(glm::vec3(cameraEye[0], cameraEye[1], cameraEye[2]), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-		ubo.proj = glm::perspective(glm::radians(60.0f), sc.extent.width / (float)sc.extent.height, 0.1f, 60.0f);
-		ubo.proj[1][1] *= -1;
 
+		ubo.model = glm::mat4(1.0f);
+
+		ubo.view = glm::lookAt(cam.eye, cam.center, glm::vec3(0.0f, -1.0f, 0.0f));
+		//ubo.view = glm::lookAt(glm::vec3(0.0f,0.0f,-5.0f),glm::vec3(0.0f,0.0f,0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+		ubo.proj = glm::perspective(glm::radians(60.0f), sc.extent.width / (float)sc.extent.height, 0.1f, 100.0f);
+		ubo.proj[1][1] *= -1;
 		void* data;
 		vkMapMemory(vk->device, uniformBuffers[currentImage].memory, 0, sizeof(ubo), 0, &data);
 		memcpy(data, &ubo, sizeof(ubo));
 		vkUnmapMemory(vk->device, uniformBuffers[currentImage].memory);
+	}
 
+	void updateUniformBuffer(uint32_t currentImage) {
+		//auto startTime = std::chrono::high_resolution_clock::now();
+		//auto currentTime = std::chrono::high_resolution_clock::now();
+		//float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+		//ubo.model = glm::translate(glm::rotate(glm::mat4(1.0f), time*glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),glm::vec3(1.0f,1.0f,0.0f));
+		//ubo.model = glm::translate(glm::mat4(0.0f), glm::vec3(1.0f, 1.0f, 0.0f));
+		//ubo.model = glm::rotate(glm::mat4(1.0f), time*glm::radians(90.0f), glm::vec3(0.0f, 0.0f,1.0f));
+		
+		//ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		
+		//ubo.model = glm::mat4(1.0f);
+		//ubo.model[3][0] = 1.0f;
+		//ubo.model[3][1] = 1.0f;
+		//ubo.model[3][2] = 0.0f;
+
+		if (!camChanged[currentImage]) return;
+		writeUniformBuffer(currentImage);
+		camChanged[currentImage] = false;
 	}
 
 	void createDescriptorSetLayout() {
@@ -765,31 +811,35 @@ private:
 			//	from secondary command buffers.
 			vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+			// Descriptor Set bindings.ffs
+			vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &(descriptorSets[descriptorGroup][i]), 0, nullptr);
+
+			vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipeline);
+			vkCmdDraw(commandBuffers[i], 6,1, 0, 0);
+			
 			vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-			//• vertexCount : Even though we don’t have a vertex buffer, we technically
-			//	still have 3 vertices to draw.
-			//• instanceCount : Used for instanced rendering, use 1 if you’re not doing
-			//	that.
-			//• firstVertex : Used as an offset into the vertex buffer, defines the lowest
-			//	value of gl_VertexIndex.
-			//• firstInstance : Used as an offset for instanced rendering, defines the
-			//	lowest value of gl_InstanceIndex.
-			//vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
-			// EDIT: The previous commented was for a hard coded vertices in the shader. The application now allocates a vertex buffer outside
-			// and copys the vertices data from the application to the buffer
+			////• vertexCount : Even though we don’t have a vertex buffer, we technically
+			////	still have 3 vertices to draw.
+			////• instanceCount : Used for instanced rendering, use 1 if you’re not doing
+			////	that.
+			////• firstVertex : Used as an offset into the vertex buffer, defines the lowest
+			////	value of gl_VertexIndex.
+			////• firstInstance : Used as an offset for instanced rendering, defines the
+			////	lowest value of gl_InstanceIndex.
+			////vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+			//// EDIT: The previous commented was for a hard coded vertices in the shader. The application now allocates a vertex buffer outside
+			//// and copys the vertices data from the application to the buffer
 
 			VkBuffer vertexBuffers[] = { vertexBuffer.buffer };
 			VkDeviceSize offsets[] = { 0 };
 			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
-			// We can only have a single index buffer.
+			//// We can only have a single index buffer.
 			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-			// Descriptor Set bindings.ffs
-			vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &(descriptorSets[descriptorGroup][i]), 0, nullptr);
-			// Draw Vertex
-			//vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
-			// Indexed Vertex Draw
+			//// Draw Vertex
+			////vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+			//// Indexed Vertex Draw
 			vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices.size()) , 1, 0, 0, 0);
 
 
@@ -800,6 +850,7 @@ private:
 			}
 		}
 	}
+
 };
 
 

@@ -1,13 +1,125 @@
 #include "glfwInteraction.h"
 
-const float pi = 3.14159265358979323846264338327950288;
-const float dAngle = pi / 60;
-const float dr = 0.5f;
 
-float r = 20.0f;
-const float t0 = 0.0f;
-const float phi0 = pi / 2;
+bool CameraEyeLookAt::keyCallbackMoveCameraEye(int key, int scancode, int action, int mods) {
+	if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		if (!top) {
+			if ((phi1 - dAngle) < 0.01f) {
+				top = true;
+				phi1 = 0.01f;
+			}
+			else {
+				phi1 -= dAngle;
+			}
 
+			cphi1 = cos(phi1);
+			sphi1 = sin(phi1);
+
+			center[0] = eye[0] + ct1 * sphi1;
+			center[2] = eye[2] + st1 * sphi1;
+			center[1] = eye[1] - cphi1;
+
+			if (bottom) bottom = false;
+
+			return true;
+		}
+	}
+	else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		if (!bottom) {
+
+			if ((phi1 + dAngle) > pi) {
+				bottom = true;
+				phi1 = pi - 0.01f;
+			}
+			else {
+				phi1 += dAngle;
+			}
+
+			cphi1 = cos(phi1);
+			sphi1 = sin(phi1);
+
+			center[0] = eye[0] + ct1 * sphi1;
+			center[2] = eye[2] + st1 * sphi1;
+			center[1] = eye[1] - cphi1;
+
+			if (top) top = false;
+			return true;
+		}
+	}
+	else if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+
+		if ((t1 + dAngle) > pi) {
+			t1 = -pi;
+		}
+		else {
+			t1 += dAngle;
+		}
+
+		ct1 = cos(t1);
+		st1 = sin(t1);
+
+		center[0] = eye[0] + sphi1 * ct1;
+		center[2] = eye[2] + sphi1 * st1;
+		return true;
+
+	}
+	else if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+
+		if ((t1 - dAngle) < -pi) {
+			t1 = pi;
+		}
+		else {
+			t1 -= dAngle;
+		}
+
+		ct1 = cos(t1);
+		st1 = sin(t1);
+
+		center[0] = eye[0] + sphi1 * ct1;
+		center[2] = eye[2] + sphi1 * st1;
+		return true;
+	}
+	// Walk camera forward
+	else if (key == GLFW_KEY_D && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		center[0] += dr;
+		eye[0] += dr;
+		return true;
+	}
+	// Walk camera backwar
+	else if (key == GLFW_KEY_A && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		center[0] -= dr;
+		eye[0] -= dr;
+		return true;
+	}
+	// Walk camera forward
+	else if (key == GLFW_KEY_W && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		center[2] += dr;
+		eye[2] += dr;
+		return true;
+	}
+	// Walk camera backward
+	else if (key == GLFW_KEY_S && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		center[2] -= dr;
+		eye[2] -= dr;
+		return true;
+	}
+	// Walk camera forward
+	else if (key == GLFW_KEY_Z && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		center[1] += dr;
+		eye[1] += dr;
+		return true;
+	}
+	// Walk camera backward
+	else if (key == GLFW_KEY_X && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		center[1] -= dr;
+		eye[1] -= dr;
+		return true;
+	}
+	return false;
+}
+
+
+float r = 200.0f;
 float cameraEye[3] = { r * cos(t0) * sin(phi0) , r * cos(phi0), -r * sin(t0) * sin(phi0) };
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)

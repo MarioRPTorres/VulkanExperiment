@@ -239,6 +239,14 @@ if (BUILD_MAIN_EXAMPLE)
 	    example/VulkanTutorial.cpp
     )
     CONFIGUREEXAMPLETARGET(${EXAMPLE_MAIN_TARGET} TRUE TRUE)
+    ADD_CUSTOM_COMMAND(TARGET ${EXAMPLE_MAIN_TARGET}
+        POST_BUILD
+        #COMMAND cmake_path  command_Mode command 
+        COMMAND ${CMAKE_COMMAND} -E copy "./shaders/shader.vert" $<TARGET_FILE_DIR:${EXAMPLE_MAIN_TARGET}>/shaders
+        COMMAND ${CMAKE_COMMAND} -E copy "./shaders/shader.frag" $<TARGET_FILE_DIR:${EXAMPLE_MAIN_TARGET}>/shaders
+        COMMAND ${CMAKE_COMMAND} -E copy "./shaders/infiniteGrid.vert" $<TARGET_FILE_DIR:${EXAMPLE_MAIN_TARGET}>/shaders
+        COMMAND ${CMAKE_COMMAND} -E copy "./shaders/infiniteGrid.frag" $<TARGET_FILE_DIR:${EXAMPLE_MAIN_TARGET}>/shaders
+    )
 endif()
 
 if (BUILD_SHADERTOY_EXAMPLE)
