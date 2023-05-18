@@ -7,18 +7,18 @@
 #define IPR INDICES_PRIMITIVE_RESTART
 
 const std::array<P3Vertex, 12> vertices = {{
-	{{  0.0f,  0.0f,  0.0f}}, // Palm Center
-	{{  0.0f,  0.8f,  0.0f}}, // Arm prev
-	{{  0.0f,  0.5f,  0.0f}}, // Arm next
-	{{ -0.1f,  0.3f,  0.0f}},  // Pinky: Metacarpal prev 
-	{{ -0.4f, -0.2f,  0.0f}},  // Prox prev
-	{{ -0.8f, -0.6f,  0.0f}},  // Inter prev
-	{{  0.2f,  0.3f,  0.0f}},  // Index: Metacarpal prev 
-	{{  0.4f, -0.2f,  0.0f}},  // Prox prev
-	{{  0.6f, -0.8f,  0.0f}},  // Inter prev
-	{{  0.6f,  0.3f,  0.0f}},  // Thumb: Metacarpal prev 
-	{{  0.8f,  0.1f,  0.0f}},  // Prox prev
-	{{  0.9f, -0.1f,  0.0f}}  // Inter prev
+	{{  0.0f,  0.0f,  0.1f}}, // Palm Center
+	{{  0.0f,  0.8f,  0.1f}}, // Arm prev
+	{{  0.0f,  0.5f,  0.1f}}, // Arm next
+	{{ -0.1f,  0.3f,  0.1f}},  // Pinky: Metacarpal prev 
+	{{ -0.4f, -0.2f,  0.1f}},  // Prox prev
+	{{ -0.8f, -0.6f,  0.1f}},  // Inter prev
+	{{  0.2f,  0.3f,  0.1f}},  // Index: Metacarpal prev 
+	{{  0.4f, -0.2f,  0.1f}},  // Prox prev
+	{{  0.6f, -0.8f,  0.1f}},  // Inter prev
+	{{  0.6f,  0.3f,  0.1f}},  // Thumb: Metacarpal prev 
+	{{  0.8f,  0.1f,  0.1f}},  // Prox prev
+	{{  0.9f, -0.1f,  0.1f}}  // Inter prev
 } };
 
 const std::array<uint32_t, 14> indices = {
