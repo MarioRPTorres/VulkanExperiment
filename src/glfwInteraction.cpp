@@ -17,7 +17,7 @@ bool CameraEyeLookAt::keyCallbackMoveCameraEye(int key, int scancode, int action
 
 			center[0] = eye[0] + ct1 * sphi1;
 			center[2] = eye[2] + st1 * sphi1;
-			center[1] = eye[1] - cphi1;
+			center[1] = eye[1] + cphi1;
 
 			if (bottom) bottom = false;
 
@@ -40,7 +40,7 @@ bool CameraEyeLookAt::keyCallbackMoveCameraEye(int key, int scancode, int action
 
 			center[0] = eye[0] + ct1 * sphi1;
 			center[2] = eye[2] + st1 * sphi1;
-			center[1] = eye[1] - cphi1;
+			center[1] = eye[1] + cphi1;
 
 			if (top) top = false;
 			return true;

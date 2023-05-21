@@ -15,11 +15,11 @@ const float t0 = 0.0f;
 const float phi0 = pi / 2;
 
 struct CameraEyeLookAt {
-	glm::vec3 eye = {0,0,-5};
+	glm::vec3 eye = {0,0,5};
 	glm::vec3 center = {0,0,0};
 	uint8_t upAxis = 0; // unused
 	// Cached floats
-	float t1 = pi/2;
+	float t1 = -pi/2;
 	float phi1 = pi/2;
 	float cphi1 = cos(phi1);
 	float sphi1 = sin(phi1);

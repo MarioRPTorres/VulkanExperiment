@@ -84,6 +84,8 @@ cv::Mat loadImage(std::string imagePath) {
 	if (image.data == NULL) {
 		throw std::runtime_error("failed to load texture image!");
 	}
+	//cv::Rect crop_region(0, 0, image.size[1], image.size[0]/2);
+	//image = image(crop_region);
 	cv::cvtColor(image, image, cv::COLOR_BGR2RGBA, 4);
 
 	return image;
@@ -411,7 +413,7 @@ private:
 
 		ubo.model = glm::mat4(1.0f);
 
-		ubo.view = glm::lookAt(cam.eye, cam.center, glm::vec3(0.0f, -1.0f, 0.0f));
+		ubo.view = glm::lookAt(cam.eye, cam.center, glm::vec3(0.0f, 1.0f, 0.0f));
 		//ubo.view = glm::lookAt(glm::vec3(0.0f,0.0f,-5.0f),glm::vec3(0.0f,0.0f,0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 		ubo.proj = glm::perspective(glm::radians(60.0f), sc.extent.width / (float)sc.extent.height, 0.1f, 100.0f);
 		ubo.proj[1][1] *= -1;
