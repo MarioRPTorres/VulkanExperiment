@@ -12,10 +12,19 @@
       "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
-      "installDir": "${sourceDir}/install/${presetName}",
+      "installDir": "C:\\.local\\VulkanEngine",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl.exe",
-        "CMAKE_CXX_COMPILER": "cl.exe"
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "GLFW_SOURCE_DIR": "C:\\.dev\\ThirdParties\\glfw-3.3.8",
+        "GLM_SOURCE_DIR": "C:\\.dev\\ThirdParties\\glm-0.9.9.8",
+        "IMGUI_SOURCE_DIR": "C:\\.dev\\ThirdParties\\imgui-1.89.8-docking",
+        "TINYOBJLOADER_SOURCE_DIR": "C:\\.dev\\ThirdParties\\tinyobjloader-2.0-rc1",
+        "OPENCV_BIN_DIR": "C:\\.local\\opencv-4.6.0\\build",
+        "OPENCV_STATIC": true,
+        "VKENGINE_BUILD_EXAMPLES": true,
+        "VKENGINE_IMGUI_BUILD": true,
+        "VKENGINE_INSTALL":  true
       },
       "condition": {
         "type": "equals",
@@ -32,13 +41,15 @@
         "value": "x64",
         "strategy": "external"
       },
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
     },
     {
       "name": "x64-release",
       "displayName": "x64 Release",
       "description": "Target Windows (64-bit) with the Visual Studio development environment. (RelWithDebInfo)",
-      "inherits": "x64-debug",
+      "inherits": "windows-base",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     },
     {
