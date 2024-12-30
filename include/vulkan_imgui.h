@@ -69,7 +69,6 @@ struct VkEImgui_Backend {
 
 	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-	VkPipeline pipeline = VK_NULL_HANDLE;
 	
 
 	VkAllocationCallbacks* allocator = nullptr;
@@ -97,17 +96,19 @@ struct VkEImgui_Backend {
 
 void check_vk_result(VkResult err); 
 
-void VkEImgui_setupBackEnd(VkEImgui_Backend& bd, VulkanEngine* vk,GLFWwindow* window, VkE_SwapChain sc, bool firstPass, uint32_t maxFramesInFlight);
+void VkEImgui_setupMainViewport(VkEImgui_Backend& bd, GLFWwindow* window, VkE_SwapChain sc, bool firstPass, uint32_t graphicsQueueFamily);
+
 void VkEImgui_createBackEndObjects(VkEImgui_Backend& imBd);
-void VkEImgui_init(VkEImgui_Backend& imguiBackEnd);
+void VkEImgui_init(VkEImgui_Backend& imguiBackEnd, VulkanEngine* vk, GLFWwindow* window, uint32_t maxFramesInFlight);
 void VkEImgui_addDefaultFont(VkEImgui_Backend* imBd);
 void VkEImgui_setCustomFontFromFileTTF(VkEImgui_Backend* bd, std::string fontFilePath, float fontSize);
 void VkEImgui_cleanupBackEndObjects(VkEImgui_Backend& imObj);
-void VkEImgui_cleanupSwapChain(VkEImgui_Backend& imObj);
-void recreateImguiSwapChainObjects(VkEImgui_Backend& imObj, VkE_SwapChain sc, bool firstPass, uint32_t maxFramesInFlight);
-void VkEImgui_CreatePipeline(VkEImgui_Backend* bd);
+void VkEImgui_cleanupMainViewportSwapChainObjects(VkEImgui_Backend& imObj);
+void VkEImgui_setWindowSizeMainViewport(VkEImgui_Backend& imObj, VkE_SwapChain sc, bool firstPass, uint32_t maxFramesInFlight);
+void VkEImgui_CreatePipeline(VkEImgui_Backend* bd,VkEImgui_Viewport* vp);
 void VkEImgui_Shutdown();
 
 void VkE_Imgui_NewFrame();
+void VkEImgui_RenderDrawData(void* imgui_draw_data, VkEImgui_Viewport* viewport);
 void VkEImgui_RenderDrawData(void* imgui_draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline = VK_NULL_HANDLE);
 #endif

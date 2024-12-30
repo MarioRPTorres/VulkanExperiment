@@ -162,7 +162,9 @@ public:
 		glfwGetFramebufferSize(window, &width, &height);
 		initVulkan();
 		if (enableImgui) {
-			VkEImgui_init(imGuiBackEnd);
+			VkEImgui_init(imGuiBackEnd,vk,window,MAX_FRAME_IN_FLIGHT);
+			VkEImgui_createBackEndObjects(imGuiBackEnd);
+			VkEImgui_setupMainViewport(imGuiBackEnd, window, sc, imguiInfo, vk->getBackEndData().graphicsQueueFamily);
 			VkEImgui_addDefaultFont(&imGuiBackEnd);
 		}
 		mainLoop();
@@ -251,10 +253,6 @@ private:
 
 		createSwapChainObjects();
 
-		if (enableImgui) {
-			VkEImgui_setupBackEnd(imGuiBackEnd, vk,window, sc,imguiInfo, MAX_FRAME_IN_FLIGHT);
-			VkEImgui_createBackEndObjects(imGuiBackEnd);
-		}
 		firstSwapChain = false;
 	}
 
@@ -297,7 +295,7 @@ private:
 		// Write the command buffers after the descriptor sets are updated
 		writeCommandBuffers();
 		if (enableImgui && !firstSwapChain) {
-			recreateImguiSwapChainObjects(imGuiBackEnd, sc, imguiInfo, MAX_FRAME_IN_FLIGHT);
+			VkEImgui_setWindowSizeMainViewport(imGuiBackEnd, sc, imguiInfo, MAX_FRAME_IN_FLIGHT);
 		}
 		vk->createSyncObjects(syncObjects, sc.imageCount);
 	}
@@ -320,7 +318,7 @@ private:
 		vkDestroyRenderPass(vk->device, renderPass, nullptr);
 
 		if (enableImgui) {
-			VkEImgui_cleanupSwapChain(imGuiBackEnd);
+			VkEImgui_cleanupMainViewportSwapChainObjects(imGuiBackEnd);
 		}
 
 		for (size_t i = 0; i < sc.imageViews.size(); i++) {
@@ -662,6 +660,7 @@ private:
 		std::vector<VkCommandBuffer> submitCommmandBuffers = { commandBuffers[imageIndex] };
 		VkResult err;
 		if (enableImgui) {
+			imGuiBackEnd.mainViewport.imageIndex = imageIndex;
 			err = vkResetCommandBuffer(imGuiBackEnd.mainViewport.commandBuffers[imageIndex], 0);
 			check_vk_result(err);
 			VkCommandBufferBeginInfo info = {};
@@ -682,7 +681,7 @@ private:
 			vkCmdBeginRenderPass(imGuiBackEnd.mainViewport.commandBuffers[imageIndex], &imguiRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 			// Record Imgui Draw Data and draw funcs into command buffer
-			VkEImgui_RenderDrawData(ImGui::GetDrawData(), imGuiBackEnd.mainViewport.commandBuffers[imageIndex]);
+			VkEImgui_RenderDrawData(ImGui::GetDrawData(), &imGuiBackEnd.mainViewport);
 			// Submit command buffer
 			vkCmdEndRenderPass(imGuiBackEnd.mainViewport.commandBuffers[imageIndex]);
 			err = vkEndCommandBuffer(imGuiBackEnd.mainViewport.commandBuffers[imageIndex]);
