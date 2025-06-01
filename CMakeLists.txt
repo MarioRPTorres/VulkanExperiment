@@ -305,4 +305,8 @@ CONFIGUREEXAMPLETARGET(PicturePeekaboo TRUE FALSE)
 add_executable( DeepLeap examples/DeepLeap.cpp )
 CONFIGUREEXAMPLETARGET(DeepLeap TRUE TRUE)
 
+# Application for testing out features used for DeepLeap application
+add_executable( PixelatedRendering examples/PixelatedRendering.cpp )
+CONFIGUREEXAMPLETARGET(PixelatedRendering TRUE FALSE)
+
 endif()
